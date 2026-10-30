@@ -241,7 +241,10 @@ sb_finish() {
   _stub=$SB_WORK/sb-stub
   if [ ! -x "$_stub" ]; then
     log "building SFX stub"
-    ( cd "$SB_ROOT/stub" && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o "$_stub" . ) \
+    # -buildvcs=false: the stub is built from inside a bind-mounted checkout whose
+  # git ownership differs from the container user, and go's VCS stamping then
+  # fails with 'error obtaining VCS status: exit status 128'.
+  ( cd "$SB_ROOT/stub" && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w' -o "$_stub" . ) \
       || die "stub build failed"
   fi
 

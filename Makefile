@@ -44,7 +44,7 @@ tools/%: FORCE
 FORCE:
 
 stub:
-	cd stub && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o $(ROOT)/build/sb-stub .
+	cd stub && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w' -o $(ROOT)/build/sb-stub .
 
 # Install the build dependencies a recipe declares in its header.
 # Every recipe also needs: python3 (pack.py), zstd (payload), go (SFX stub).
