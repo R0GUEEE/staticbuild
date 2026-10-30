@@ -8,8 +8,9 @@ src=$(sb_fetch "https://github.com/jqlang/jq/releases/download/jq-$SB_VERSION/jq
 sb_unpack "$src" "$SB_WORK/src/jq"
 sb_cd "$SB_WORK/src/jq/jq-$SB_VERSION"
 
+# jq links through libtool, which honours -all-static, not -static, for programs.
 ./configure --disable-maintainer-mode --disable-docs --with-oniguruma=builtin \
-  CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
+  CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 make -j "$SB_JOBS"
 sb_bin jq jq
 export SB_PATHS=bin

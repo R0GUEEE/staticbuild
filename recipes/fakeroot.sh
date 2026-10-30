@@ -5,9 +5,7 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-git clone --depth 1 --branch "upstream/$SB_VERSION" \
-  https://salsa.debian.org/cli/fakeroot.git "$SB_WORK/src/fakeroot" 2>/dev/null || \
-git clone --depth 1 https://salsa.debian.org/cli/fakeroot.git "$SB_WORK/src/fakeroot"
+sb_git https://salsa.debian.org/cli/fakeroot.git "upstream/$SB_VERSION" fakeroot
 sb_cd "$SB_WORK/src/fakeroot"
 
 ./bootstrap 2>/dev/null || autoreconf -fi

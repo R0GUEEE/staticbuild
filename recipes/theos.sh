@@ -11,8 +11,7 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-git clone --depth 1 https://github.com/theos/theos.git "$SB_WORK/src/theos" 2>/dev/null || true
-[ -d "$SB_WORK/src/theos" ] || die "theos clone failed"
+sb_git https://github.com/theos/theos.git "$SB_VERSION" theos || die "theos clone failed"
 
 # Logos lives in its own repo and is vendored under bin/
 if [ ! -d "$SB_WORK/src/theos/bin/logos" ]; then

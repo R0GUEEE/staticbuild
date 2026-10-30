@@ -5,9 +5,7 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-git clone --depth 1 --branch "$SB_VERSION" \
-  https://github.com/ProcursusTeam/ldid.git "$SB_WORK/src/ldid" 2>/dev/null || \
-git clone --depth 1 https://github.com/ProcursusTeam/ldid.git "$SB_WORK/src/ldid"
+sb_git https://github.com/ProcursusTeam/ldid.git "$SB_VERSION" ldid --recurse
 sb_cd "$SB_WORK/src/ldid"
 
 # ldid vendors libplist; OPENSSL comes from the system or the openssl recipe.

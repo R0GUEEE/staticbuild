@@ -143,6 +143,7 @@ sb_unpack() {
     *.tar.zst) zstd -dc "$_tar" | tar -xf - -C "$_dst" ;;
     *.tar.xz)  tar -xf "$_tar" -C "$_dst" ;;
     *.tar.gz|*.tgz) tar -xzf "$_tar" -C "$_dst" ;;
+    *.tar.bz2|*.tbz2) tar -xjf "$_tar" -C "$_dst" ;;
     *.zip)     unzip -q "$_tar" -d "$_dst" ;;
     *) die "unknown archive type: $_tar" ;;
   esac
@@ -281,10 +282,20 @@ sb_finish() {
 }
 
 # Clone with a shallow, tag-pinned checkout (keeps SOURCE_DATE_EPOCH builds small).
-sb_git() {  # sb_git URL TAG DEST
-  if [ -d "$SB_CACHE/src/$3" ]; then return; fi
-  mkdir -p "$SB_CACHE/src"
-  log "git clone $1 @ $2"
-  git clone --depth 1 --branch "$2" "$1" "$SB_CACHE/src/$3" >/dev/null 2>&1 \
-    || git clone --depth 1 "$1" "$SB_CACHE/src/$3"
+# Clone a repo into the work tree, preferring a tag that matches the manifest
+# version and falling back to the default branch with a warning. Projects rename
+# tags constantly (ldid ships 2.1.5-procursus7, not 2.1.5), and a hard failure
+# there is a build outage for no good reason.
+sb_git() {  # sb_git URL TAG DEST [--recurse]
+  _url=$1; _tag=$2; _dest=$SB_WORK/src/$3; _sub=""
+  [ "${4:-}" = --recurse ] && _sub="--recurse-submodules --shallow-submodules"
+  rm -rf "$_dest"
+  mkdir -p "$SB_WORK/src"
+  log "git clone $3 @ $_tag"
+  if git clone --depth 1 --branch "$_tag" $_sub "$_url" "$_dest" 2>/dev/null; then
+    return 0
+  fi
+  warn "tag $_tag not found in $_url; building the default branch"
+  rm -rf "$_dest"
+  git clone --depth 1 $_sub "$_url" "$_dest"
 }

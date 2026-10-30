@@ -5,8 +5,7 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-src=$(sb_fetch "https://busybox.net/downloads/busybox-$SB_VERSION.tar.tar.bz2" "" ) 2>/dev/null || \
-src=$(sb_fetch "https://git.busybox.net/busybox/snapshot/busybox-$SB_VERSION.tar.bz2")
+src=$(sb_fetch "https://busybox.net/downloads/busybox-$SB_VERSION.tar.bz2")
 sb_unpack "$src" "$SB_WORK/src/busybox"
 sb_cd "$SB_WORK/src/busybox/busybox-$SB_VERSION"
 

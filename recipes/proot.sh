@@ -5,8 +5,7 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-git clone --depth 1 --branch "v$SB_VERSION" https://github.com/termux/proot.git "$SB_WORK/src/proot" 2>/dev/null || \
-git clone --depth 1 https://github.com/termux/proot.git "$SB_WORK/src/proot"
+sb_git https://github.com/termux/proot.git "v$SB_VERSION" proot
 sb_cd "$SB_WORK/src/proot/src"
 
 make -j "$SB_JOBS" CC="${CC:-cc}" \
