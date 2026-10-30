@@ -9,7 +9,7 @@ if [ ! -d "$SB_WORK/src/protobuf/.git" ]; then
   git clone --depth 1 --branch "v$SB_VERSION" --recurse-submodules --shallow-submodules \
     https://github.com/protocolbuffers/protobuf.git "$SB_WORK/src/protobuf"
 fi
-cd "$SB_WORK/src/protobuf"
+sb_cd "$SB_WORK/src/protobuf"
 
 cmake -B out -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -25,6 +25,6 @@ cmake --build out -j "$SB_JOBS" --target protoc
 sb_bin out/protoc protoc
 mkdir -p "$SB_STAGE/include"
 cp -R src/google "$SB_STAGE/include/"
-SB_PATHS="bin"
-SB_ENTRY="bin/protoc"
+export SB_PATHS="bin"
+export SB_ENTRY="bin/protoc"
 sb_finish

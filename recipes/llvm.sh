@@ -84,8 +84,8 @@ for b in "$SB_STAGE/bin"/*; do
   esac
 done
 
-SB_PATHS="bin"
-SB_ENTRY="bin/clang"
-SB_ENV='"CC": "${ROOT}/bin/clang", "CXX": "${ROOT}/bin/clang++"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/clang"
+export SB_ENV='"CC": "${ROOT}/bin/clang", "CXX": "${ROOT}/bin/clang++"'
 sb_layer lib
 sb_finish

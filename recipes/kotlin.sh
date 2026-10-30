@@ -45,9 +45,9 @@ SH
 chmod 755 "$SB_STAGE/bin/kotlinc"
 ln -sf kotlinc "$SB_STAGE/bin/kotlinc-jvm"
 
-SB_PATHS="bin"
-SB_ENTRY="bin/kotlinc"
-SB_ENV='"KOTLIN_HOME": "${ROOT}/lib"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/kotlinc"
+export SB_ENV='"KOTLIN_HOME": "${ROOT}/lib"'
 sb_layer lib/kotlinc-lib
 sb_layer jre
 sb_finish

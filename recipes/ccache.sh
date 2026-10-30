@@ -6,7 +6,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/ccache/ccache/releases/download/v$SB_VERSION/ccache-$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/ccache"
-cd "$SB_WORK/src/ccache/ccache-$SB_VERSION"
+sb_cd "$SB_WORK/src/ccache/ccache-$SB_VERSION"
 
 _DEFS="-DREDIS_STORAGE_BACKEND=OFF -DENABLE_DOCS=OFF -DENABLE_TESTING=OFF -DDEPS=OFF -DCMAKE_SKIP_RPATH=ON"
 
@@ -25,6 +25,6 @@ esac
 cmake --build out -j "$SB_JOBS"
 
 sb_bin out/ccache ccache
-SB_PATHS="bin"
-SB_ENTRY="bin/ccache"
+export SB_PATHS="bin"
+export SB_ENTRY="bin/ccache"
 sb_finish

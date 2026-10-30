@@ -8,7 +8,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/openssl/openssl/releases/download/openssl-$SB_VERSION/openssl-$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/openssl"
-cd "$SB_WORK/src/openssl/openssl-$SB_VERSION"
+sb_cd "$SB_WORK/src/openssl/openssl-$SB_VERSION"
 
 case "$SB_FAMILY" in
   elf)
@@ -31,6 +31,6 @@ make -j "$SB_JOBS"
 make install_sw install_ssldirs
 
 sb_bin "$SB_WORK/openssl/bin/openssl" openssl
-SB_PATHS="bin"
-SB_ENTRY="bin/openssl"
+export SB_PATHS="bin"
+export SB_ENTRY="bin/openssl"
 sb_finish

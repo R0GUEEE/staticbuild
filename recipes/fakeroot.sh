@@ -8,7 +8,7 @@ sb_init
 git clone --depth 1 --branch "upstream/$SB_VERSION" \
   https://salsa.debian.org/cli/fakeroot.git "$SB_WORK/src/fakeroot" 2>/dev/null || \
 git clone --depth 1 https://salsa.debian.org/cli/fakeroot.git "$SB_WORK/src/fakeroot"
-cd "$SB_WORK/src/fakeroot"
+sb_cd "$SB_WORK/src/fakeroot"
 
 ./bootstrap 2>/dev/null || autoreconf -fi
 ./configure --prefix=/usr --disable-static \
@@ -25,7 +25,7 @@ for l in "$SB_WORK/src/fakeroot"/.libs/libfakeroot*.so*; do
   cp -R "$l" "$SB_STAGE/lib/fakeroot/"
 done
 
-SB_PATHS="bin"
-SB_ENTRY="bin/fakeroot"
-SB_ENV='"FAKEROOTKEY": "0", "FAKEROOTDONTTRYCHOWN": "1"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/fakeroot"
+export SB_ENV='"FAKEROOTKEY": "0", "FAKEROOTDONTTRYCHOWN": "1"'
 sb_finish

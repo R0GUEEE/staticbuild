@@ -6,7 +6,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/libarchive/libarchive/releases/download/v$SB_VERSION/libarchive-$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/libarchive"
-cd "$SB_WORK/src/libarchive/libarchive-$SB_VERSION"
+sb_cd "$SB_WORK/src/libarchive/libarchive-$SB_VERSION"
 
 cmake -B out -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -20,5 +20,5 @@ cmake --build out -j "$SB_JOBS"
 sb_bin out/bsdtar tar
 sb_bin out/bsdcpio cpio
 sb_symlinks bsdtar
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

@@ -129,6 +129,10 @@ sb_unpack() {
   esac
 }
 
+# A cd that cannot silently fail: recipes are run with set -e, but a failed cd
+# inside a pipeline does not abort, and the build then compiles the wrong tree.
+sb_cd() { cd "$1" || die "cannot cd to $1"; }
+
 # ------------------------------------------------------------------ staging
 
 sb_bin() {  # sb_bin SRC [NAME]

@@ -7,7 +7,7 @@ sb_init
 src=$(sb_fetch "https://github.com/ninja-build/ninja/archive/refs/tags/v$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/ninja"
 
-cd "$SB_WORK/src/ninja/ninja-$SB_VERSION"
+sb_cd "$SB_WORK/src/ninja/ninja-$SB_VERSION"
 
 case "$SB_FAMILY" in
   elf)
@@ -32,5 +32,5 @@ case "$SB_FAMILY" in
 esac
 
 sb_symlinks samu
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

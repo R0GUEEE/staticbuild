@@ -11,7 +11,7 @@ sb_init
 
 src=$(sb_fetch "https://www.python.org/ftp/python/$SB_VERSION/Python-$SB_VERSION.tgz")
 sb_unpack "$src" "$SB_WORK/src/python"
-cd "$SB_WORK/src/python/Python-$SB_VERSION"
+sb_cd "$SB_WORK/src/python/Python-$SB_VERSION"
 
 if [ "$SB_FAMILY" = elf ]; then
   _cfg="--without-shared --disable-test-modules --enable-optimizations --with-lto"
@@ -52,8 +52,8 @@ done
   cp -R "$_p/lib/python3.$SB_VERSION/site-packages/pip"* "$SB_STAGE/lib/python3.$SB_VERSION/site-packages/" 2>/dev/null || true
 [ -x "$_p/bin/pip3" ] && cp "$_p/bin/pip3" "$SB_STAGE/bin/pip3" || true
 
-SB_PATHS="bin"
-SB_ENTRY="bin/python3"
-SB_ENV='"PYTHONHOME": "${ROOT}", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/python3"
+export SB_ENV='"PYTHONHOME": "${ROOT}", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"'
 sb_layer "lib/python3.$SB_VERSION"
 sb_finish

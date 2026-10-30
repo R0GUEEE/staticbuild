@@ -64,6 +64,6 @@ sed 's|"main": "tsc.js"|"main": "tsserver.js"|; s|"output": "tsc.blob"|"output":
 cp "$_pkg/lib/tsserver.js" "$SB_WORK/sea/tsserver.js"
 ( cd "$SB_WORK/sea" && node --experimental-sea-config sea-tsserver.json ) || warn "tsserver SEA skipped"
 
-SB_PATHS="bin"
-SB_ENTRY="bin/tsc"
+export SB_PATHS="bin"
+export SB_ENTRY="bin/tsc"
 sb_finish

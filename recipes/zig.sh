@@ -26,7 +26,7 @@ chmod 755 "$SB_STAGE/bin/zig"
   ( cd "$SB_STAGE/lib" && tar -xf - )
 cp "$_root/LICENSE" "$SB_STAGE/.sb/LICENSE" 2>/dev/null || true
 
-SB_PATHS="bin"
-SB_ENTRY="bin/zig"
+export SB_PATHS="bin"
+export SB_ENTRY="bin/zig"
 sb_layer lib
 sb_finish

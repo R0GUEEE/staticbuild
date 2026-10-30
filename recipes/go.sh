@@ -16,7 +16,7 @@ export GOROOT_BOOTSTRAP="$BOOT"
 export GOROOT_FINAL=/go
 export CGO_ENABLED=0
 
-cd "$SB_WORK/src/go/go/src"
+sb_cd "$SB_WORK/src/go/go/src"
 GOROOT_BOOTSTRAP="$BOOT" ./make.bash --no-banner
 
 GOROOT="$SB_WORK/src/go/go"
@@ -32,7 +32,7 @@ mkdir -p "$SB_STAGE/bin"
 ln -s ../go/bin/go "$SB_STAGE/bin/go"
 ln -s ../go/bin/gofmt "$SB_STAGE/bin/gofmt"
 
-SB_ENV='"GOROOT": "${ROOT}/go", "GOTOOLCHAIN": "local"'
-SB_PATHS="bin"
-SB_ENTRY="bin/go"
+export SB_ENV='"GOROOT": "${ROOT}/go", "GOTOOLCHAIN": "local"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/go"
 sb_finish

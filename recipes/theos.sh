@@ -47,8 +47,8 @@ if [ -f "$SB_STAGE/theos/bin/logos.pl" ]; then
   ln -sf ../theos/bin/logos.pl "$SB_STAGE/bin/logos.pl"
 fi
 
-SB_PATHS="bin"
-SB_ENTRY="bin/theos"
-SB_REQUIRE="clang make ldid dpkg-deb perl"
-SB_ENV='"THEOS": "${ROOT}/theos"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/theos"
+export SB_REQUIRE="clang make ldid dpkg-deb perl"
+export SB_ENV='"THEOS": "${ROOT}/theos"'
 sb_finish

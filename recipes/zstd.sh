@@ -6,7 +6,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/facebook/zstd/archive/refs/tags/v$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/zstd"
-cd "$SB_WORK/src/zstd/zstd-$SB_VERSION"
+sb_cd "$SB_WORK/src/zstd/zstd-$SB_VERSION"
 
 case "$SB_FAMILY" in
   elf)   _ld="-static" ;;
@@ -18,5 +18,5 @@ make -C programs -j "$SB_JOBS" zstd MOREFLAGS="$(sb_cflags) $_ld -DZSTD_MULTITHR
 
 sb_bin programs/zstd zstd
 sb_symlinks zstdcat unzstd zstdmt
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

@@ -33,7 +33,7 @@ if src_samu=$(sb_fetch "https://github.com/michaelforney/samurai/releases/downlo
   ln -sf samu "$SB_STAGE/bin/ninja"
 fi
 
-SB_PATHS="bin"
-SB_REQUIRE="python3"
-SB_ENTRY="bin/meson"
+export SB_PATHS="bin"
+export SB_REQUIRE="python3"
+export SB_ENTRY="bin/meson"
 sb_finish

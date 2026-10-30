@@ -27,7 +27,7 @@ if [ "${BAKE_SDK:-0}" = 1 ]; then
     warn "xtool setup failed; bundle ships without the SDK"
 fi
 
-SB_PATHS="bin"
-SB_ENTRY="bin/xtool"
-SB_ENV='"XTOOL_HOME": "${ROOT}"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/xtool"
+export SB_ENV='"XTOOL_HOME": "${ROOT}"'
 sb_finish

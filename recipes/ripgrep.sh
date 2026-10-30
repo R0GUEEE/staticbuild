@@ -16,10 +16,10 @@ command -v cargo >/dev/null || die "cargo not found (install the rust bundle fir
 
 src=$(sb_fetch "https://github.com/BurntSushi/ripgrep/archive/refs/tags/$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/rg"
-cd "$SB_WORK/src/rg/ripgrep-$SB_VERSION"
+sb_cd "$SB_WORK/src/rg/ripgrep-$SB_VERSION"
 
 cargo build --release --target "$_t" --locked
 
 sb_bin "target/$_t/release/rg" rg
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

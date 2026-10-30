@@ -7,7 +7,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/git/git/archive/refs/tags/v$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/git"
-cd "$SB_WORK/src/git/git-$SB_VERSION"
+sb_cd "$SB_WORK/src/git/git-$SB_VERSION"
 
 _ld="$([ "$SB_FAMILY" = elf ] && echo -static -s)"
 
@@ -28,7 +28,7 @@ chmod 755 "$SB_STAGE/bin/git"
 # git dispatches to git-<subcommand> helpers; they must be exec'able from GIT_EXEC_PATH
 ( cd "$_p/libexec/git-core" && tar -cf - . ) | ( cd "$SB_STAGE/libexec" && tar -xf - )
 
-SB_PATHS="bin"
-SB_ENTRY="bin/git"
-SB_ENV='"GIT_EXEC_PATH": "${ROOT}/libexec", "GIT_TEMPLATE_DIR": "${ROOT}/libexec/templates", "GIT_SSL_CAINFO": "/etc/ssl/certs/ca-certificates.crt"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/git"
+export SB_ENV='"GIT_EXEC_PATH": "${ROOT}/libexec", "GIT_TEMPLATE_DIR": "${ROOT}/libexec/templates", "GIT_SSL_CAINFO": "/etc/ssl/certs/ca-certificates.crt"'
 sb_finish

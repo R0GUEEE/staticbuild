@@ -8,7 +8,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/Kitware/CMake/releases/download/v$SB_VERSION/cmake-$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/cmake"
-cd "$SB_WORK/src/cmake/cmake-$SB_VERSION"
+sb_cd "$SB_WORK/src/cmake/cmake-$SB_VERSION"
 
 case "$SB_FAMILY" in
   elf)
@@ -34,8 +34,8 @@ sb_bin "$_p/bin/cpack" cpack
 mkdir -p "$SB_STAGE/share"
 cp -R "$_p/share/cmake-$SB_VERSION" "$SB_STAGE/share/"
 
-SB_PATHS="bin"
-SB_ENTRY="bin/cmake"
-SB_ENV='"CMAKE_ROOT": "${ROOT}/share/cmake-'"$SB_VERSION"'"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/cmake"
+export SB_ENV='"CMAKE_ROOT": "${ROOT}/share/cmake-'"$SB_VERSION"'"'
 sb_layer "share/cmake-$SB_VERSION"
 sb_finish

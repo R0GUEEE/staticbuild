@@ -43,8 +43,8 @@ if ! ls "$SB_STAGE/lib/swift/static-linux" >/dev/null 2>&1; then
   fi
 fi
 
-SB_PATHS="bin usr/bin"
-SB_ENTRY="bin/swiftc"
-SB_ENV='"SWIFT_BACKTRACE": "enable=no"'
+export SB_PATHS="bin usr/bin"
+export SB_ENTRY="bin/swiftc"
+export SB_ENV='"SWIFT_BACKTRACE": "enable=no"'
 sb_layer lib/swift
 sb_finish

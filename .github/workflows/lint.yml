@@ -57,5 +57,25 @@ jobs:
       - name: corrupt payload must be rejected
         run: |
           cp /tmp/hello-bundle /tmp/broken
-          printf 'X' | dd of=/tmp/broken bs=1 seek=100 conv=notrunc 2>/dev/null
+          # flip one byte *inside the payload*, not the stub: the stub is not covered
+          # by the payload checksum and flipping it only breaks the code path we test next
+          python3 - <<'PY'
+          import struct, os
+          p = "/tmp/broken"
+          size = os.path.getsize(p)
+          with open(p, "r+b") as f:
+              f.seek(size - 64)
+              magic, ver, flags, off, plen, digest, epoch = struct.unpack("<4sHHQQ32sQ", f.read(64))
+              assert magic == b"SBX1", "trailer magic missing"
+              f.seek(off + 64)
+              f.write(bytes([f.read(1)[0] ^ 0xFF]))
+          print("corrupted one payload byte")
+          PY
           if /tmp/broken; then echo "corruption not detected"; exit 1; fi
+          echo "rejected as expected"
+
+      - name: truncated bundle must be rejected
+        run: |
+          head -c 3000000 /tmp/hello-bundle > /tmp/truncated
+          if /tmp/truncated; then echo "truncation not detected"; exit 1; fi
+          echo "rejected as expected"

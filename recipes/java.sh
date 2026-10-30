@@ -33,8 +33,8 @@ for b in java javac jar jlink jdeps javap jshell keytool; do
   [ -x "$SB_STAGE/jre/bin/$b" ] && ln -sf "../jre/bin/$b" "$SB_STAGE/bin/$b"
 done
 
-SB_PATHS="bin jre/bin"
-SB_ENTRY="bin/javac"
-SB_ENV='"JAVA_HOME": "${ROOT}/jre"'
+export SB_PATHS="bin jre/bin"
+export SB_ENTRY="bin/javac"
+export SB_ENV='"JAVA_HOME": "${ROOT}/jre"'
 sb_layer jre
 sb_finish

@@ -6,7 +6,7 @@ sb_init
 
 src=$(sb_fetch "https://github.com/tukaani-project/xz/releases/download/v$SB_VERSION/xz-$SB_VERSION.tar.gz")
 sb_unpack "$src" "$SB_WORK/src/xz"
-cd "$SB_WORK/src/xz/xz-$SB_VERSION"
+sb_cd "$SB_WORK/src/xz/xz-$SB_VERSION"
 
 ./configure --disable-shared --enable-static --disable-nls --disable-doc \
   --disable-ifunc --prefix=/usr \
@@ -15,5 +15,5 @@ make -j "$SB_JOBS"
 
 sb_bin src/xz/xz xz
 sb_symlinks unxz xzcat lzma unzlzma
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

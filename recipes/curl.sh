@@ -7,7 +7,7 @@ sb_init
 
 src=$(sb_fetch "https://curl.se/download/curl-$SB_VERSION.tar.xz")
 sb_unpack "$src" "$SB_WORK/src/curl"
-cd "$SB_WORK/src/curl/curl-$SB_VERSION"
+sb_cd "$SB_WORK/src/curl/curl-$SB_VERSION"
 
 _ssl=openssl
 [ "${BUILD_OPENSSL:-0}" = 1 ] && _ssl=openssl
@@ -27,5 +27,5 @@ fi
 
 make -j "$SB_JOBS"
 sb_bin src/curl curl
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

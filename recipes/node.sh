@@ -30,7 +30,7 @@ else
     git clone --depth 1 --branch "nodejs-mobile-v$SB_VERSION" \
       https://github.com/JaneaSystems/nodejs-mobile.git "$SB_WORK/src/nodejs-mobile"
 
-  cd "$SB_WORK/src/nodejs-mobile"
+  sb_cd "$SB_WORK/src/nodejs-mobile"
   ./configure --without-snapshot --with-intl=none --without-ssl \
     --openssl-no-asm --dest-os=ios --dest-cpu=arm64 \
     --v8-options="-DV8_ENABLE_WEBASSEMBLY=0 -DV8_TARGET_ARCH_ARM64=1 -D__arm64__"
@@ -39,7 +39,7 @@ else
   sb_bin out/Release/node node
 fi
 
-SB_PATHS="bin"
-SB_ENTRY="bin/node"
-SB_ENV='"NODE_PATH": "${ROOT}/lib/node_modules"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/node"
+export SB_ENV='"NODE_PATH": "${ROOT}/lib/node_modules"'
 sb_finish

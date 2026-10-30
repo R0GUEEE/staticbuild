@@ -8,7 +8,7 @@ sb_init
 src=$(sb_fetch "https://busybox.net/downloads/busybox-$SB_VERSION.tar.tar.bz2" "" ) 2>/dev/null || \
 src=$(sb_fetch "https://git.busybox.net/busybox/snapshot/busybox-$SB_VERSION.tar.bz2")
 sb_unpack "$src" "$SB_WORK/src/busybox"
-cd "$SB_WORK/src/busybox/busybox-$SB_VERSION"
+sb_cd "$SB_WORK/src/busybox/busybox-$SB_VERSION"
 
 # The allnoconfig base keeps the binary near 900 KiB; the fragment turns back on
 # what a build tool actually shells out to.
@@ -78,5 +78,5 @@ yes "" | make oldconfig >/dev/null 2>&1 || true
 make -j "$SB_JOBS" CFLAGS_EXTRA="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
 
 sb_bin busybox busybox
-SB_PATHS=bin
+export SB_PATHS=bin
 sb_finish

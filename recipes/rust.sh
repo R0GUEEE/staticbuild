@@ -16,7 +16,7 @@ _pfx="rust-$SB_VERSION-$_host"
 src=$(sb_fetch "https://static.rust-lang.org/dist/$_pfx.tar.xz")
 sb_unpack "$src" "$SB_WORK/src/rust"
 
-cd "$SB_WORK/src/rust/$_pfx"
+sb_cd "$SB_WORK/src/rust/$_pfx"
 ./install.sh --prefix="$SB_STAGE/rust" --disable-ldconfig --without=rust-docs
 
 # rust-std for the iOS target (and the simulator slice, which is a different rustc target)
@@ -36,8 +36,8 @@ for b in rustc cargo rustdoc rustfmt clippy-driver cargo-clippy rust-lld; do
   [ -f "$SB_STAGE/rust/bin/$b" ] && ln -sf "../rust/bin/$b" "$SB_STAGE/bin/$b"
 done
 
-SB_PATHS="bin"
-SB_ENTRY="bin/cargo"
-SB_ENV='"CARGO_HOME": "${ROOT}/cargo", "RUSTUP_TOOLCHAIN": "staticbuild"'
+export SB_PATHS="bin"
+export SB_ENTRY="bin/cargo"
+export SB_ENV='"CARGO_HOME": "${ROOT}/cargo", "RUSTUP_TOOLCHAIN": "staticbuild"'
 sb_layer rust/lib
 sb_finish
