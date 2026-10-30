@@ -20,8 +20,9 @@ _projects="clang;lld"
 
 src=$(sb_fetch "https://github.com/llvm/llvm-project/releases/download/llvmorg-$SB_VERSION/llvm-project-$SB_VERSION.src.tar.xz")
 sb_unpack "$src" "$SB_WORK/src/llvm"
-_src="$SB_WORK/src/llvm/llvm-project-$SB_VERSION"
-[ -d "$_src/llvm" ] || die "llvm: unexpected tarball layout"
+# The release asset unpacks to llvm-project-<version>.src, not llvm-project-<version>.
+_src=$(find "$SB_WORK/src/llvm" -maxdepth 1 -mindepth 1 -type d -name 'llvm-project-*' | head -1)
+[ -n "$_src" ] && [ -d "$_src/llvm" ] || die "llvm: unexpected tarball layout"
 
 _common="-G Ninja
   -DCMAKE_BUILD_TYPE=Release

@@ -310,8 +310,9 @@ sb_finish() {
   sb_meta
 
   _out=$SB_DIST/$SB_TOOL-$SB_VERSION-$SB_TARGET
+  # pack.py reads layers/tier/entry/aliases from .sb/meta.json; the only flag
+  # it still wants from here is the stub and the tree.
   _flags=""
-  case " ${SB_LAYERS:-} " in *" "*) [ -n "${SB_LAYERS:-}" ] && _flags=--layered ;; esac
 
   case "$SB_EFFECTIVE_TIER" in
     static|macho)
@@ -328,6 +329,7 @@ sb_finish() {
       python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags ;;
   esac
 
+  chmod 755 "$_out"
   _size=$(wc -c < "$_out" | tr -d ' ')
   _sum=$(sb_sha256 "$_out")
   printf '%s  %s\n' "$_sum" "$(basename "$_out")" >> "$SB_DIST/SHA256SUMS"

@@ -249,7 +249,7 @@
             "bin"
           ],
           "size_budget_mb": 260,
-          "smoke": "go version && GOROOT=$SB_BUNDLE_ROOT/go go run /dev/stdin <<< 'package main; func main(){}'",
+          "smoke": "go version && printf 'package main\\nfunc main() {}\\n' > /tmp/x.go && go run /tmp/x.go && echo built",
           "notes": "Built from source with CGO_ENABLED=0 and GOROOT inside the bundle (sets GOROOT via meta env). GOOS=ios / GOARCH=arm64 works out of the box: cross-compiling iOS apps from the phone is the point."
         },
         "ios-arm64": {

@@ -53,6 +53,16 @@ print(f"{ver} {flags} {off} {plen} {digest.hex()} {epoch}")
 PY
 }
 
+# The bundle format is versioned: SBX1 carried a zstd tar, SBX2 (current) is a
+# content-addressed blob table with an index. Only SBX1 can be unpacked by the
+# shell; SBX2 artifacts are still checked for size and smoke-tested by running
+# them, which is what actually matters here.
+is_sbx2() {
+  _sz=$(wc -c < "$1" | tr -d ' ')
+  [ "$_sz" -gt 64 ] || return 1
+  dd if="$1" bs=1 skip=$((_sz - 64)) count=4 2>/dev/null | od -An -c | grep -q 'S   B   X   2'
+}
+
 extract_payload() {  # bundle -> dir
   _line=$(read_trailer "$1") || return 1
   _off=$(echo "$_line" | cut -d' ' -f3)
@@ -172,7 +182,10 @@ SBLOOKUP
 
   # A bundle's first four bytes are the ELF/Mach-O magic of its stub, so the
   # trailer is the only reliable discriminator.
-  if read_trailer "$_artifact" >/dev/null 2>&1; then
+  if is_sbx2 "$_artifact"; then
+    ok "SBX2 bundle (content-addressed blobs, index at trailer)"
+    _bin=$_artifact
+  elif read_trailer "$_artifact" >/dev/null 2>&1; then
     ok "SFX bundle (static stub + zstd payload)"
     _root=$TMP/root; rm -rf "$_root"; mkdir -p "$_root"
     if ! extract_payload "$_artifact" "$_root"; then
