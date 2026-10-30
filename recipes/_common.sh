@@ -17,6 +17,12 @@
 
 set -eu
 
+# A recipe may be run directly (`sh recipes/ninja.sh`) or through make; in both
+# cases $0 is the recipe, so the tool id can always be derived from it.
+SB_TOOL=${SB_TOOL:-$(basename "$0" .sh)}
+SB_VERSION=${SB_VERSION:-0.0.0}
+SB_TARGET=${SB_TARGET:-}
+
 SB_ROOT=${SB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 SB_WORK=${SB_WORK:-$SB_ROOT/build}
 SB_CACHE=${SB_CACHE:-$SB_WORK/cache}
@@ -28,6 +34,8 @@ SB_JOBS=${SB_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 
 export LC_ALL=C
 export TZ=UTC
 export SOURCE_DATE_EPOCH=$SB_EPOCH
+
+[ -n "$SB_TARGET" ] || { echo "sb: SB_TARGET is required (linux-arm64, linux-x86_64, ios-arm64, macos-arm64)" >&2; exit 2; }
 
 case "$SB_TARGET" in
   linux-arm64)   SB_ARCH=aarch64; SB_TRIPLE=aarch64-linux-musl; SB_FAMILY=elf ;;
@@ -81,7 +89,9 @@ sb_cflags() {
   case "$SB_FAMILY" in
     elf) echo "-O2 -fPIC -static-libgcc" ;;
     macho)
-      case "$SB_TARGET" in
+      [ -n "$SB_TARGET" ] || { echo "sb: SB_TARGET is required (linux-arm64, linux-x86_64, ios-arm64, macos-arm64)" >&2; exit 2; }
+
+case "$SB_TARGET" in
         ios-arm64|ios-arm64-sim)
           echo "-O2 -arch $SB_ARCH -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=15.0" ;;
         *) echo "-O2 -arch $SB_ARCH" ;;

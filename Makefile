@@ -39,7 +39,7 @@ tools/%: FORCE
 	  m=$$($(call meta,$*)); \
 	  ver=$$(echo "$$m" | cut -f1); tier=$$(echo "$$m" | cut -f2); \
 	  echo "--- $* $$ver ($(TARGET), $$tier)"; \
-	  SB_VERSION="$$ver" SB_TIER="$$tier" sh recipes/$*.sh
+	  SB_VERSION="$$ver" SB_TIER="$$tier" SB_TOOL="$*" sh recipes/$*.sh
 
 FORCE:
 
