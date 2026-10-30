@@ -25,6 +25,13 @@ jobs:
           PY
       - name: targets referenced by the manifest exist
         run: python3 scripts/matrix.py --check
+      - name: make can actually reach a recipe
+        # caught a real bug: marking tools/* .PHONY makes GNU make skip implicit
+        # rule search, so every build printed "Nothing to be done"
+        run: |
+          for t in ninja zstd ldid; do
+            make -n "tools/$t" TARGET=linux-arm64 | grep -q "sh recipes/$t.sh" || { echo "$t unreachable"; exit 1; }
+          done
 
   shell:
     runs-on: ubuntu-24.04

@@ -27,16 +27,21 @@ meta = python3 -c 'import json,sys; m=json.load(open("manifest/tools.json")); \
 
 TOOLS := $(shell python3 -c 'import json;print(" ".join(t["id"] for t in json.load(open("manifest/tools.json"))["tools"]))')
 
-.PHONY: all clean distclean verify lint matrix stub deps help $(addprefix tools/,$(TOOLS))
+.PHONY: all clean distclean verify lint matrix stub deps help
+# NB: the tools/* targets are deliberately NOT .PHONY. GNU make skips implicit
+# rule search for phony targets, so `tools/%: FORCE` would never fire and every
+# build would print "Nothing to be done". FORCE achieves the same "always run".
 
 all: $(addprefix tools/,$(TOOLS))
 
-tools/%:
+tools/%: FORCE
 	@set -eu; \
 	  m=$$($(call meta,$*)); \
 	  ver=$$(echo "$$m" | cut -f1); tier=$$(echo "$$m" | cut -f2); \
 	  echo "--- $* $$ver ($(TARGET), $$tier)"; \
 	  SB_VERSION="$$ver" SB_TIER="$$tier" sh recipes/$*.sh
+
+FORCE:
 
 stub:
 	cd stub && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o $(ROOT)/build/sb-stub .
