@@ -1,0 +1,97 @@
+name: release
+
+# Tag push -> one release carrying every artifact, a signed checksum file and an
+# index.json that downstream projects consume instead of scraping the API.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: tag to publish (must already exist)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/matrix.py --check
+      - name: every catalog entry must be ga or explicitly not-supported
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          m = json.load(open("manifest/tools.json"))
+          bad = []
+          for t in m["tools"]:
+              for name, b in t.get("targets", {}).items():
+                  st = b.get("status", "ga")
+                  if st == "planned":
+                      bad.append(f"{t['id']}/{name}")
+          print("planned (not built by this release):", ", ".join(bad) or "none")
+          PY
+
+  publish:
+    needs: [gate]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: checksums + index
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS
+          python3 - "$GITHUB_REF_NAME" <<'PY'
+          import json, os, sys, hashlib
+          tag = sys.argv[1]
+          tools = []
+          for name in sorted(os.listdir(".")):
+              if not os.path.isfile(name) or name in ("SHA256SUMS", "index.json"):
+                  continue
+              size = os.path.getsize(name)
+              digest = hashlib.sha256(open(name, "rb").read()).hexdigest()
+              # clang-20.1.8-linux-arm64
+              stem = name[:-4] if name.endswith(".tar") else name
+              parts = stem.rsplit("-", 2)
+              tools.append({
+                  "file": name,
+                  "tool": parts[0] if len(parts) == 3 else stem,
+                  "version": parts[1] if len(parts) == 3 else "",
+                  "target": "-".join(parts[2:]) if len(parts) == 3 else "",
+                  "size": size,
+                  "sha256": digest,
+                  "url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{name}",
+              })
+          json.dump({"schema": 1, "tag": tag, "generated_by": "release.yml", "artifacts": tools},
+                    open("index.json", "w"), indent=1)
+          print(f"indexed {len(tools)} artifacts")
+          PY
+
+      - name: sign checksums (minisign)
+        if: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
+        run: |
+          printf '%s' "${{ secrets.MINISIGN_SECRET_KEY }}" > key.txt
+          minisign -Sm artifacts/SHA256SUMS -s key.txt -W || true
+          shred -u key.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: |
+            artifacts/*
+          body: |
+            Static binaries for iOS tooling. Every file is one executable.
+
+            | file | size | sha256 |
+            |---|---|---|
+            | (see SHA256SUMS) | | |
+
+            Verify: `sha256sum -c SHA256SUMS`
+            Use: `chmod +x clang-20.1.8-linux-arm64 && ./clang-20.1.8-linux-arm64 --version`

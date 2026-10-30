@@ -1,0 +1,9 @@
+# build output — artifacts live in GitHub Releases, never in git
+dist/
+build/
+*.tmp
+*.sb-ok
+# local scratch
+.DS_Store
+__pycache__/
+*.pyc

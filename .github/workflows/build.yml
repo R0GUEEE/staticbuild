@@ -1,0 +1,134 @@
+name: build
+
+# One job per (tool, target), matrix generated from manifest/tools.json.
+# ELF targets build in Alpine on arm64 runners; Mach-O targets build on macOS.
+# Two jobs rather than one because a container cannot be conditional.
+on:
+  push:
+    branches: [main]
+    paths: ['recipes/**', 'stub/**', 'scripts/**', 'manifest/**', '.github/workflows/build.yml']
+  pull_request:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        default: linux-arm64
+      tools:
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      target:
+        description: target to build
+        type: choice
+        options: [linux-arm64, linux-x86_64, ios-arm64, macos-arm64]
+        default: linux-arm64
+      tools:
+        description: comma-separated ids (empty = all for the target)
+        type: string
+        default: ''
+
+concurrency:
+  group: build-${{ github.ref }}-${{ inputs.target || 'auto' }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      elfc: ${{ steps.m.outputs.elfc }}
+      macho: ${{ steps.m.outputs.macho }}
+      target: ${{ steps.m.outputs.target }}
+      count: ${{ steps.m.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: m
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, subprocess, os
+          target = os.environ["INPUT_TARGET"] or "linux-arm64"
+          ids = [x for x in os.environ["INPUT_TOOLS"].split(",") if x.strip()]
+          cmd = ["python3", "scripts/matrix.py", "--target", target]
+          if ids:
+              cmd += ["--ids", ",".join(ids)]
+          m = json.loads(subprocess.check_output(cmd))
+          print("target=" + target)
+          print("count=" + str(len(m["include"])))
+          print("elfc=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "elf"]}))
+          print("macho=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "macho"]}))
+          print(f"::notice::{target}: {len(m['include'])} tools")
+          PY
+        env:
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_TOOLS: ${{ inputs.tools }}
+
+  elf:
+    needs: plan
+    if: ${{ needs.plan.outputs.elfc != '{"include": []}' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.elfc) }}
+    runs-on: ${{ matrix.runs-on }}
+    container: alpine:3.21
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: build deps
+        run: |
+          apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz \
+            tar gzip bzip2 perl pkgconf make autoconf automake libtool \
+            zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
+            gettext-dev libffi-dev libxml2-dev
+      - uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
+          restore-keys: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
+      - name: build
+        run: make "tools/${{ matrix.id }}" TARGET='${{ matrix.target }}' JOBS=$(getconf _NPROCESSORS_ONLN)
+      - name: size
+        run: |
+          ls -l dist/
+          { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
+            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  macho:
+    needs: plan
+    if: ${{ needs.plan.outputs.macho != '{"include": []}' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.macho) }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: build deps
+        run: brew install cmake ninja zstd xz gnu-tar || true
+      - uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: sb-macho-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
+          restore-keys: sb-macho-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
+      - name: build
+        run: make "tools/${{ matrix.id }}" TARGET='${{ matrix.target }}' JOBS=$(sysctl -n hw.ncpu)
+      - name: size
+        run: |
+          ls -l dist/
+          { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
+            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
+          if-no-files-found: error
+          retention-days: 14

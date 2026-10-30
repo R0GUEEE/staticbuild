@@ -1,0 +1,264 @@
+#!/bin/sh
+# shellcheck shell=sh
+# Shared helpers for every recipe. Sourced, never executed.
+#
+# Inputs (set by make/ CI):
+#   SB_TOOL     tool id, must match manifest/tools.json
+#   SB_VERSION  version being built
+#   SB_TARGET   linux-arm64 | linux-x86_64 | ios-arm64 | macos-arm64 | ...
+#   SB_TIER     static | sfx | layer | macho
+# Outputs:
+#   $SB_STAGE   staged tree (becomes the bundle payload)
+#   $SB_DIST    final artifacts
+#
+# Everything is POSIX sh. Recipes run on Alpine (busybox ash) and on macOS
+# (bash 3.2 / sh), so no arrays, no [[ ]], no local -n, no GNU-only flags
+# outside of a case on uname.
+
+set -eu
+
+SB_ROOT=${SB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
+SB_WORK=${SB_WORK:-$SB_ROOT/build}
+SB_CACHE=${SB_CACHE:-$SB_WORK/cache}
+SB_DIST=${SB_DIST:-$SB_ROOT/dist}
+SB_STAGE=${SB_STAGE:-$SB_WORK/stage/$SB_TOOL-$SB_TARGET}
+SB_EPOCH=${SOURCE_DATE_EPOCH:-1700000000}
+SB_JOBS=${SB_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)}
+
+export LC_ALL=C
+export TZ=UTC
+export SOURCE_DATE_EPOCH=$SB_EPOCH
+
+case "$SB_TARGET" in
+  linux-arm64)   SB_ARCH=aarch64; SB_TRIPLE=aarch64-linux-musl; SB_FAMILY=elf ;;
+  linux-x86_64)  SB_ARCH=x86_64;  SB_TRIPLE=x86_64-linux-musl;  SB_FAMILY=elf ;;
+  ios-arm64)     SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-ios;    SB_FAMILY=macho ;;
+  ios-arm64-sim) SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-ios-simulator; SB_FAMILY=macho ;;
+  macos-arm64)   SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-darwin; SB_FAMILY=macho ;;
+  macos-x86_64)  SB_ARCH=x86_64;  SB_TRIPLE=x86_64-apple-darwin; SB_FAMILY=macho ;;
+  *) echo "sb: unknown SB_TARGET '$SB_TARGET'" >&2; exit 2 ;;
+esac
+
+SB_EFFECTIVE_TIER=${SB_TIER:-sfx}
+export SB_ARCH SB_TRIPLE SB_FAMILY SB_EFFECTIVE_TIER
+
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- environment
+
+sb_init() {
+  mkdir -p "$SB_CACHE" "$SB_DIST" "$SB_STAGE"
+  rm -rf "$SB_STAGE"
+  mkdir -p "$SB_STAGE/bin" "$SB_STAGE/.sb"
+
+  SB_ENTRY=${SB_ENTRY:-bin/$SB_TOOL}
+  SB_PATHS=${SB_PATHS:-bin}
+  SB_ENV=${SB_ENV:-}
+  SB_REQUIRE=${SB_REQUIRE:-}
+
+  log "$SB_TOOL $SB_VERSION → $SB_TARGET ($SB_EFFECTIVE_TIER, $SB_TRIPLE)"
+  if [ "$SB_FAMILY" = elf ] && [ "$(uname -s)" = Darwin ]; then
+    warn "cross-building static ELF on Darwin needs zig or an aarch64-musl clang; recipes use \`zig cc\` when SB_CC is unset"
+  fi
+}
+
+# Host cc: on Linux the system compiler (musl), on macOS a zig-based cross cc.
+sb_cc() {
+  if [ -n "${SB_CC:-}" ]; then echo "$SB_CC"; return; fi
+  case "$SB_FAMILY" in
+    elf)   echo "${CROSS_CC:-cc}" ;;
+    macho)
+      if [ -n "${IOS_CC:-}" ]; then echo "$IOS_CC";
+      elif [ "$(uname -s)" = Darwin ]; then echo xcrun -sdk "${SB_SDK:-iphoneos}" clang;
+      else die "no Mach-O host compiler: set IOS_CC"; fi ;;
+  esac
+}
+
+# Extra flags every recipe appends: arch, sysroot for iOS, static linking.
+sb_cflags() {
+  case "$SB_FAMILY" in
+    elf) echo "-O2 -fPIC -static-libgcc" ;;
+    macho)
+      case "$SB_TARGET" in
+        ios-arm64|ios-arm64-sim)
+          echo "-O2 -arch $SB_ARCH -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=15.0" ;;
+        *) echo "-O2 -arch $SB_ARCH" ;;
+      esac ;;
+  esac
+}
+
+# ------------------------------------------------------------------ fetching
+
+# sb_fetch URL [SHA256] -> prints the cached file path
+sb_fetch() {
+  _url=$1
+  _sum=${2:-}
+  _name=$(basename "${_url%%\?*}")
+  _out=$SB_CACHE/$_name
+  if [ ! -f "$_out" ]; then
+    log "fetch $_name"
+    curl -fsSL --retry 3 --retry-delay 2 -o "$_out.part" "$_url" || die "download failed: $_url"
+    mv "$_out.part" "$_out"
+  fi
+  if [ -n "$_sum" ]; then
+    _got=$(sb_sha256 "$_out")
+    [ "$_got" = "$_sum" ] || die "checksum mismatch for $_name
+  want $_sum
+  got  $_got"
+  fi
+  printf '%s\n' "$_out"
+}
+
+sb_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+sb_unpack() {
+  _tar=$1; _dst=$2
+  mkdir -p "$_dst"
+  log "unpack $(basename "$_tar")"
+  case "$_tar" in
+    *.tar.zst) zstd -dc "$_tar" | tar -xf - -C "$_dst" ;;
+    *.tar.xz)  tar -xf "$_tar" -C "$_dst" ;;
+    *.tar.gz|*.tgz) tar -xzf "$_tar" -C "$_dst" ;;
+    *.zip)     unzip -q "$_tar" -d "$_dst" ;;
+    *) die "unknown archive type: $_tar" ;;
+  esac
+}
+
+# ------------------------------------------------------------------ staging
+
+sb_bin() {  # sb_bin SRC [NAME]
+  _name=${2:-$(basename "$1")}
+  mkdir -p "$SB_STAGE/bin"
+  cp "$1" "$SB_STAGE/bin/$_name"
+  chmod 755 "$SB_STAGE/bin/$_name"
+}
+
+sb_tree() {  # sb_tree SRC_DIR DEST_REL -- copy a tree into the stage
+  mkdir -p "$SB_STAGE/$2"
+  ( cd "$1" && tar -cf - . ) | ( cd "$SB_STAGE/$2" && tar -xf - )
+}
+
+sb_symlinks() {  # sb_symlinks BIN... -- link every name to the bundle's bin/<SB_TOOL>
+  for _n in "$@"; do
+    (
+      cd "$SB_STAGE/bin"
+      [ "$_n" = "$SB_TOOL" ] || ln -sf "$SB_TOOL" "$_n"
+    )
+  done
+}
+
+# Turn $SB_STAGE/<rel> into a hash-addressed layer shared across bundles.
+# The stub rewrites the @@SB_LAYER@@ token to an absolute path under the cache.
+sb_layer() {
+  _rel=$1
+  [ -d "$SB_STAGE/$_rel" ] || die "sb_layer: $SB_STAGE/$_rel does not exist"
+  _sha=$(python3 - "$SB_STAGE/$_rel" <<'PYHASH'
+import hashlib, os, sys
+root = sys.argv[1]
+h = hashlib.sha256()
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    for name in sorted(filenames):
+        path = os.path.join(dirpath, name)
+        rel = os.path.relpath(path, root)
+        h.update(rel.encode() + b"\0")
+        if os.path.islink(path):
+            h.update(os.readlink(path).encode())
+            continue
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+print(h.hexdigest()[:16])
+PYHASH
+)
+  log "layer $_rel → $_sha"
+  mkdir -p "$SB_STAGE/layers"
+  rm -rf "$SB_STAGE/layers/$_sha"
+  mv "$SB_STAGE/$_rel" "$SB_STAGE/layers/$_sha"
+  _target=@@SB_LAYER@@/$_sha
+  ln -s "$_target" "$SB_STAGE/$_rel"
+  SB_LAYERS="${SB_LAYERS:-} $_sha"
+}
+
+sb_meta() {
+  {
+    printf '{\n'
+    printf '  "tool": "%s",\n' "$SB_TOOL"
+    printf '  "version": "%s",\n' "$SB_VERSION"
+    printf '  "entry": "%s",\n' "$SB_ENTRY"
+    printf '  "family": "%s",\n' "$SB_FAMILY"
+    printf '  "triple": "%s",\n' "$SB_TRIPLE"
+    printf '  "paths": [%s],\n' "$(sb_json_list "$SB_PATHS")"
+    printf '  "require": [%s],\n' "$(sb_json_list "$SB_REQUIRE")"
+    printf '  "env": {%s},\n' "${SB_ENV:-}"
+    printf '  "layers": [%s],\n' "$(sb_json_list "${SB_LAYERS:-}")"
+    printf '  "built": %s\n' "$SB_EPOCH"
+    printf '}\n'
+  } > "$SB_STAGE/.sb/meta.json"
+  python3 -c 'import json,sys;json.load(open(sys.argv[1]))' "$SB_STAGE/.sb/meta.json" \
+    || die "generated meta.json is not valid JSON"
+}
+
+sb_json_list() {
+  python3 - "$@" <<'PY'
+import json, sys
+items = [x for a in sys.argv[1:] for x in a.split() if x]
+print(", ".join(json.dumps(i) for i in items))
+PY
+}
+
+# ---------------------------------------------------------------- finishing
+
+sb_finish() {
+  _stub=$SB_WORK/sb-stub
+  if [ ! -x "$_stub" ]; then
+    log "building SFX stub"
+    ( cd "$SB_ROOT/stub" && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o "$_stub" . ) \
+      || die "stub build failed"
+  fi
+
+  sb_meta
+
+  _out=$SB_DIST/$SB_TOOL-$SB_VERSION-$SB_TARGET
+  _flags=""
+  case " ${SB_LAYERS:-} " in *" "*) [ -n "${SB_LAYERS:-}" ] && _flags=--layered ;; esac
+
+  case "$SB_EFFECTIVE_TIER" in
+    static|macho)
+      # A single executable: it *is* the payload, so there is nothing to pack.
+      # We still wrap it when the tree carries more than the entry (share/, include/).
+      if [ "$(find "$SB_STAGE" -type f | wc -l)" -gt 2 ]; then
+        python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags
+      else
+        cp "$SB_STAGE/$SB_ENTRY" "$_out"
+        chmod 755 "$_out"
+        log "copied bare binary → $_out"
+      fi ;;
+    *)
+      python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags ;;
+  esac
+
+  _size=$(wc -c < "$_out" | tr -d ' ')
+  _sum=$(sb_sha256 "$_out")
+  printf '%s  %s\n' "$_sum" "$(basename "$_out")" >> "$SB_DIST/SHA256SUMS"
+  log "artifact $(basename "$_out") $((_size / 1024)) KiB"
+  printf '%s\n' "$_sum  $(basename "$_out")" > "$_out.sha256"
+
+  if [ -x "$SB_ROOT/scripts/verify.sh" ] && [ "${SB_SKIP_VERIFY:-0}" != 1 ]; then
+    "$SB_ROOT/scripts/verify.sh" "$_out" || die "verify failed for $(basename "$_out")"
+  fi
+}
+
+# Clone with a shallow, tag-pinned checkout (keeps SOURCE_DATE_EPOCH builds small).
+sb_git() {  # sb_git URL TAG DEST
+  if [ -d "$SB_CACHE/src/$3" ]; then return; fi
+  mkdir -p "$SB_CACHE/src"
+  log "git clone $1 @ $2"
+  git clone --depth 1 --branch "$2" "$1" "$SB_CACHE/src/$3" >/dev/null 2>&1 \
+    || git clone --depth 1 "$1" "$SB_CACHE/src/$3"
+}

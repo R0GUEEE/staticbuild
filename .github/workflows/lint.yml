@@ -1,0 +1,61 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  manifest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/matrix.py --check
+      - name: every tool has a recipe and every recipe a manifest entry
+        run: |
+          python3 - <<'PY'
+          import json, os
+          m = json.load(open("manifest/tools.json"))
+          ids = {t["id"] for t in m["tools"]}
+          files = {f[:-3] for f in os.listdir("recipes") if f.endswith(".sh") and not f.startswith("_")}
+          missing = sorted(ids ^ files)
+          if missing:
+              raise SystemExit("manifest/recipe mismatch: " + ", ".join(missing))
+          print(f"{len(ids)} tools, manifest and recipes agree")
+          PY
+      - name: targets referenced by the manifest exist
+        run: python3 scripts/matrix.py --check
+
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck -S warning recipes/*.sh scripts/*.sh
+
+  stub:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.23' }
+      - run: cd stub && go vet ./... && go build -trimpath -o /tmp/sb-stub .
+      - name: bundle round-trip
+        run: |
+          mkdir -p /tmp/tree/bin /tmp/tree/.sb
+          printf '#!/bin/sh\necho hello-from-bundle\n' > /tmp/tree/bin/hello
+          chmod +x /tmp/tree/bin/hello
+          cat > /tmp/tree/.sb/meta.json <<'JSON'
+          {"tool":"hello","version":"1.0","entry":"bin/hello","paths":["bin"]}
+          JSON
+          sudo apt-get install -y zstd
+          python3 scripts/pack.py --stub /tmp/sb-stub --root /tmp/tree --out /tmp/hello-bundle
+          /tmp/hello-bundle
+          /tmp/hello-bundle --sb-version
+          out=$(/tmp/hello-bundle --sb-print-meta | python3 -c 'import json,sys;print(json.load(sys.stdin)["tool"])')
+          test "$out" = hello
+      - name: corrupt payload must be rejected
+        run: |
+          cp /tmp/hello-bundle /tmp/broken
+          printf 'X' | dd of=/tmp/broken bs=1 seek=100 conv=notrunc 2>/dev/null
+          if /tmp/broken; then echo "corruption not detected"; exit 1; fi
