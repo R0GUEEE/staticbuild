@@ -39,7 +39,8 @@ jobs:
       elfc: ${{ steps.m.outputs.elfc }}
       macho: ${{ steps.m.outputs.macho }}
       target: ${{ steps.m.outputs.target }}
-      count: ${{ steps.m.outputs.count }}
+      elf_count: ${{ steps.m.outputs.elf_count }}
+      macho_count: ${{ steps.m.outputs.macho_count }}
     steps:
       - uses: actions/checkout@v4
       - id: m
@@ -53,7 +54,8 @@ jobs:
               cmd += ["--ids", ",".join(ids)]
           m = json.loads(subprocess.check_output(cmd))
           print("target=" + target)
-          print("count=" + str(len(m["include"])))
+          print("elf_count=" + str(len([j for j in m["include"] if j["family"] == "elf"])))
+          print("macho_count=" + str(len([j for j in m["include"] if j["family"] == "macho"])))
           print("elfc=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "elf"]}))
           print("macho=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "macho"]}))
           print(f"::notice::{target}: {len(m['include'])} tools")
@@ -64,7 +66,7 @@ jobs:
 
   elf:
     needs: plan
-    if: ${{ needs.plan.outputs.elfc != '{"include": []}' }}
+    if: ${{ needs.plan.outputs.elf_count > 0 }}
     strategy:
       fail-fast: false
       max-parallel: 8
@@ -102,7 +104,7 @@ jobs:
 
   macho:
     needs: plan
-    if: ${{ needs.plan.outputs.macho != '{"include": []}' }}
+    if: ${{ needs.plan.outputs.macho_count > 0 }}
     strategy:
       fail-fast: false
       max-parallel: 4

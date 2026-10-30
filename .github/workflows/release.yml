@@ -74,12 +74,6 @@ jobs:
           print(f"indexed {len(tools)} artifacts")
           PY
 
-      - name: sign checksums (minisign)
-        if: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
-        run: |
-          printf '%s' "${{ secrets.MINISIGN_SECRET_KEY }}" > key.txt
-          minisign -Sm artifacts/SHA256SUMS -s key.txt -W || true
-          shred -u key.txt
 
       - uses: softprops/action-gh-release@v2
         with:
