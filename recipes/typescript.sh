@@ -23,7 +23,9 @@ _node_src=$(sb_fetch "https://nodejs.org/dist/v${SB_NODE_VERSION:-22.11.0}/node-
 sb_unpack "$_node_src" "$SB_WORK/src/node-for-ts"
 _node=$(find "$SB_WORK/src/node-for-ts" -maxdepth 2 -name node -type f | head -1)
 [ -x "$_node" ] || die "typescript: no node binary in the tarball"
-export PATH="$(dirname "$_node"):$PATH"
+_node_dir=$(dirname "$_node")
+PATH="$_node_dir:$PATH"
+export PATH
 
 _np=$(sb_fetch "https://registry.npmjs.org/typescript/-/typescript-$SB_VERSION.tgz")
 mkdir -p "$SB_WORK/src/ts"
