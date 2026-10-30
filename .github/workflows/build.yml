@@ -58,11 +58,12 @@ jobs:
           print("macho_count=" + str(len([j for j in m["include"] if j["family"] == "macho"])))
           print("elfc=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "elf"]}))
           print("macho=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "macho"]}))
-          print(f"::notice::{target}: {len(m['include'])} tools")
           PY
         env:
           INPUT_TARGET: ${{ inputs.target }}
           INPUT_TOOLS: ${{ inputs.tools }}
+      - name: announce
+        run: echo "::notice::${{ steps.m.outputs.target }}: ${{ steps.m.outputs.elf_count }} ELF jobs, ${{ steps.m.outputs.macho_count }} Mach-O jobs"
 
   elf:
     needs: plan
