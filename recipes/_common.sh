@@ -209,6 +209,24 @@ PYHASH
   SB_LAYERS="${SB_LAYERS:-} $_sha"
 }
 
+# Strip everything in bin/ before packing. A release cargo/rust binary carries
+# ~30 MiB of symbols: ripgrep shipped at 35 MiB until this ran. Set SB_NO_STRIP=1
+# when a tool needs its symbols (none does today).
+sb_strip_stage() {
+  [ "${SB_NO_STRIP:-0}" = 1 ] && return 0
+  _strip=""
+  for c in strip llvm-strip; do
+    command -v "$c" >/dev/null 2>&1 && { _strip=$c; break; }
+  done
+  [ -n "$_strip" ] || { warn "no strip found; bundles will be larger"; return 0; }
+  for f in "$SB_STAGE"/bin/*; do
+    [ -f "$f" ] || continue
+    case "$(file -b "$f" 2>/dev/null)" in
+      *ELF*|*Mach-O*) "$_strip" -x "$f" 2>/dev/null || "$_strip" --strip-all "$f" 2>/dev/null || true ;;
+    esac
+  done
+}
+
 sb_meta() {
   {
     printf '{\n'
@@ -239,6 +257,7 @@ PY
 # ---------------------------------------------------------------- finishing
 
 sb_finish() {
+  sb_strip_stage
   _stub=$SB_WORK/sb-stub
   if [ ! -x "$_stub" ]; then
     log "building SFX stub"

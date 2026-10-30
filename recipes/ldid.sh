@@ -17,7 +17,10 @@ _plist="$SB_WORK/libplist"
 if [ ! -f "$_plist/lib/libplist-2.0.a" ]; then
   src=$(sb_fetch "https://github.com/libimobiledevice/libplist/releases/download/$LIBPLIST_VERSION/libplist-$LIBPLIST_VERSION.tar.bz2")
   sb_unpack "$src" "$SB_WORK/src/libplist"
-  sb_cd "$SB_WORK/src/libplist/libplist-$LIBPLIST_VERSION"
+  # tarball layouts drift; find the CMake project instead of assuming a name
+  _plsrc=$(find "$SB_WORK/src/libplist" -maxdepth 3 -name CMakeLists.txt | head -1)
+  [ -n "$_plsrc" ] || die "libplist: no CMakeLists.txt in the tarball"
+  sb_cd "$(dirname "$_plsrc")"
   cmake -B out -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$_plist" \
