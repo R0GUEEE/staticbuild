@@ -88,7 +88,10 @@ jobs:
           if-no-files-found: warn
 
   build:
-    needs: [plan, stubs, stubs-macos]
+    # stubs-macos is deliberately not a dependency: a macOS cell builds its own
+    # carrier locally (it is the only place that can), and blocking the whole
+    # matrix on one slow runner would idle 150 jobs.
+    needs: [plan, stubs]
     if: needs.plan.outputs.cells != ''
     strategy:
       fail-fast: false
@@ -122,7 +125,9 @@ jobs:
         run: |
           mkdir -p build/stub
           sh scripts/stub-build.sh "${{ matrix.target }}" || true
-          ls -l build/stub || true
+          if [ -z "$(ls -A build/stub 2>/dev/null)" ]; then
+            echo "::warning::carrier stub missing for ${{ matrix.target }}; recipes will rebuild it"
+          fi
 
       - name: Build ${{ matrix.tool }} for ${{ matrix.target }}
         shell: bash
