@@ -1,53 +1,41 @@
 #!/bin/sh
-# deps: (none) + the java bundle
-# Kotlin compiler. It is a JVM program, so this bundle shares the jre21 layer
-# with tools/java: shipping java + kotlin + gradle costs one JRE on disk.
+# deps: (none)
+# Kotlin compiler, on the JRE layer it shares with tools/java.
+#
+# The upstream kotlinc script execs $KOTLIN_HOME/jre/bin/java, which is a
+# directory JetBrains expects you to have installed. The bundle instead builds
+# the same jlink runtime java.sh builds — identical content, identical layer
+# hash — so installing java, kotlin and gradle stores one JRE.
 . "$(dirname "$0")/_common.sh"
+. "$(dirname "$0")/_jre.sh"
 sb_init
-
-_jv="$SB_WORK/cache/java-layer"
-if [ -d "$SB_STAGE/jre" ]; then
-  _jre="$SB_STAGE/jre"
-elif [ -d "$_jv" ]; then
-  _jre="$_jv"
-else
-  die "kotlin: build tools/java first (it produces the jre21 layer), or set SB_JRE=/path/to/jre"
-fi
 
 src=$(sb_fetch "https://github.com/JetBrains/kotlin/releases/download/v$SB_VERSION/kotlin-compiler-$SB_VERSION.zip")
 sb_unpack "$src" "$SB_WORK/src/kotlin"
-_k="$SB_WORK/src/kotlin/kotlinc"
-[ -d "$_k" ] || die "unexpected kotlinc layout"
+_k=$(find "$SB_WORK/src/kotlin" -maxdepth 2 -type d -name kotlinc | head -1)
+[ -n "$_k" ] || die "kotlin: unexpected archive layout"
 
-# The wrapper execs $HERE/jre/bin/java, so the JRE has to be in *this* stage.
-# Copying it and layering the copy produces the same content hash as tools/java,
-# which is exactly what makes the two bundles share one JRE on disk.
-if [ ! -d "$SB_STAGE/jre" ]; then
-  mkdir -p "$SB_STAGE/jre"
-  ( cd "$_jre" && tar -cf - . ) | ( cd "$SB_STAGE/jre" && tar -xf - )
-fi
+sb_make_jre "$SB_STAGE/jre"
 
 mkdir -p "$SB_STAGE/bin" "$SB_STAGE/lib"
 cp -R "$_k/lib" "$SB_STAGE/lib/kotlinc-lib"
-cp -R "$_k/bin" "$SB_STAGE/lib/kotlinc-bin"
 
-# Wrapper that calls the *bundled* JVM with the bundled classpath, no JAVA_HOME
-# guessing and no $KOTLIN_HOME requirement on the user's side.
-cat > "$SB_STAGE/bin/kotlinc" <<'SH'
+# Wildcard classpath: the jar set changes between Kotlin releases (2.x added
+# kotlin-daemon-embeddable and the scripting jars), and a fixed list silently
+# breaks on the next version bump.
+sb_wrapper kotlinc <<'WRAP'
 #!/bin/sh
 set -eu
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-exec "$HERE/jre/bin/java" -Xmx2g -Xss1m \
-  -Djava.awt.headless=true \
-  -cp "$HERE/lib/kotlinc-lib/kotlin-compiler.jar:$HERE/lib/kotlinc-lib/kotlin-stdlib.jar:$HERE/lib/kotlinc-lib/kotlin-reflect.jar:$HERE/lib/kotlinc-lib/kotlin-script-runtime.jar:$HERE/lib/kotlinc-lib/trove4j.jar:$HERE/lib/kotlinc-lib/annotations-13.0.jar" \
+exec "$HERE/jre/bin/java" -Xmx2g -Xss1m -Djava.awt.headless=true \
+  -cp "$HERE/lib/kotlinc-lib/*" \
   org.jetbrains.kotlin.cli.jvm.K2JVMCompiler "$@"
-SH
-chmod 755 "$SB_STAGE/bin/kotlinc"
-ln -sf kotlinc "$SB_STAGE/bin/kotlinc-jvm"
+WRAP
+sb_alias "kotlin=bin/kotlinc"
 
 export SB_PATHS="bin"
 export SB_ENTRY="bin/kotlinc"
 export SB_ENV='"KOTLIN_HOME": "${ROOT}/lib"'
-sb_layer lib/kotlinc-lib
 sb_layer jre
+sb_layer lib/kotlinc-lib
 sb_finish

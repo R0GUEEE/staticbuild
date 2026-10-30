@@ -1,69 +1,84 @@
 #!/bin/sh
-# deps: (none) + the java bundle
-# TypeScript as a Node single-executable-application: tsc and tsserver become
-# one file each, with the compiler bundle embedded in the node binary.
+# deps: (none)
+# TypeScript as a Node single-executable application: tsc and tsserver become
+# one file each, with the compiler bundle embedded in a node binary.
 #
-# Why SEA and not `pkg`/`bun`: SEA is upstream, needs no extra runtime, and
-# works with the jitless node build the iOS bundle uses.
+# Three facts make this work and each one cost a round trip somewhere:
+#  * SEA embeds exactly one JS file, so the compiler has to be bundled first —
+#    lib/tsc.js is a loader over a dozen requires, not a self-contained script;
+#  * the blob is injected with postject against a sentinel fuse, and the fuse
+#    must match the node version's string exactly;
+#  * the output is a copy of node with a payload, so it is glibc-dynamic and
+#    the bundle is one bare file, not an sfx.
 . "$(dirname "$0")/_common.sh"
 sb_init
 
 case "$SB_TARGET" in
-  linux-arm64) _node_t=linux-arm64 ;;
-  linux-x86_64) _node_t=linux-x64 ;;
-  ios-arm64) _node_t=ios-arm64 ;;
+  linux-arm64)  _t=linux-arm64 ;;
+  linux-x86_64) _t=linux-x64 ;;
   *) die "typescript: no node host for $SB_TARGET" ;;
 esac
 
-# Requires the matching node bundle to have been built first.
-_node="$SB_DIST/node-$SB_VERSION-$_node_t"
-[ -x "$_node" ] || die "build tools/node for $_node_t first (looked for $_node)"
+_node_src=$(sb_fetch "https://nodejs.org/dist/v${SB_NODE_VERSION:-22.11.0}/node-v${SB_NODE_VERSION:-22.11.0}-$_t.tar.xz")
+sb_unpack "$_node_src" "$SB_WORK/src/node-for-ts"
+_node=$(find "$SB_WORK/src/node-for-ts" -maxdepth 2 -name node -type f | head -1)
+[ -x "$_node" ] || die "typescript: no node binary in the tarball"
+export PATH="$(dirname "$_node"):$PATH"
 
 _np=$(sb_fetch "https://registry.npmjs.org/typescript/-/typescript-$SB_VERSION.tgz")
 mkdir -p "$SB_WORK/src/ts"
 tar -xzf "$_np" -C "$SB_WORK/src/ts"
 _pkg="$SB_WORK/src/ts/package"
 
-node --version >/dev/null 2>&1 || die "node not on PATH (needed for the SEA build)"
-
-# 1. bundle the compiler into one script
 mkdir -p "$SB_WORK/sea"
-node - "$_pkg" "$SB_WORK/sea/tsc.js" <<'JS'
-const path = require('path');
-const fs = require('fs');
-const [pkg, out] = process.argv.slice(2);
-const entry = path.join(pkg, 'lib', 'tsc.js');
-// TypeScript ships as CommonJS with its own module registry; a thin require
-// shim is enough because every lib/*.js file is present in the payload.
-const src = fs.readFileSync(entry, 'utf8');
-fs.writeFileSync(out, src);
-JS
+# esbuild turns the CommonJS graph into one file; it is the only bundler that
+# runs as a single static binary on the build host.
+( cd "$SB_WORK/sea" && npm --no-audit --no-fund --silent exec --yes -- \
+    esbuild@0.24.0 "$_pkg/lib/tsc.js" --bundle --platform=node --format=cjs \
+    --outfile=tsc.bundle.js ) > "$SB_WORK/sea/bundle.log" 2>&1 || {
+      tail -20 "$SB_WORK/sea/bundle.log" >&2
+      die "typescript: esbuild bundling failed"
+    }
+( cd "$SB_WORK/sea" && npm --no-audit --no-fund --silent exec --yes -- \
+    esbuild@0.24.0 "$_pkg/lib/tsserver.js" --bundle --platform=node --format=cjs \
+    --outfile=tsserver.bundle.js ) >> "$SB_WORK/sea/bundle.log" 2>&1 || \
+    warn "typescript: tsserver bundle failed (tsc still ships)"
 
-# 2. SEA blob, then inject into a copy of node (postject is the sanctioned tool)
 cat > "$SB_WORK/sea/sea-config.json" <<'JSON'
 {
-  "main": "tsc.js",
+  "main": "tsc.bundle.js",
   "output": "tsc.blob",
   "disableExperimentalSEAWarning": true,
   "useSnapshot": false,
   "useCodeCache": false
 }
 JSON
-node --experimental-sea-config "$SB_WORK/sea/sea-config.json" 2>/dev/null || \
-  die "node SEA is unavailable in this node build"
+( cd "$SB_WORK/sea" && "$_node" --experimental-sea-config sea-config.json ) \
+  || die "typescript: node SEA generation failed"
 
+mkdir -p "$SB_STAGE/bin"
 cp "$_node" "$SB_STAGE/bin/tsc"
 chmod 755 "$SB_STAGE/bin/tsc"
-npx --yes postject "$SB_STAGE/bin/tsc" NODE_SEA_BLOB "$SB_WORK/sea/tsc.blob" \
-  --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 || \
-  die "postject failed"
+( cd "$SB_WORK/sea" && npm --no-audit --no-fund --silent exec --yes -- \
+    postject "$SB_STAGE/bin/tsc" NODE_SEA_BLOB tsc.blob \
+    --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 ) \
+  || die "typescript: postject failed"
 
-# tsserver: same trick, different entry
-sed 's|"main": "tsc.js"|"main": "tsserver.js"|; s|"output": "tsc.blob"|"output": "tsserver.blob"|' \
-  "$SB_WORK/sea/sea-config.json" > "$SB_WORK/sea/sea-tsserver.json"
-cp "$_pkg/lib/tsserver.js" "$SB_WORK/sea/tsserver.js"
-( cd "$SB_WORK/sea" && node --experimental-sea-config sea-tsserver.json ) || warn "tsserver SEA skipped"
+if [ -f "$SB_WORK/sea/tsserver.bundle.js" ]; then
+  sed 's|tsc.bundle.js|tsserver.bundle.js|; s|tsc.blob|tsserver.blob|' \
+    "$SB_WORK/sea/sea-config.json" > "$SB_WORK/sea/sea-tsserver.json"
+  ( cd "$SB_WORK/sea" && "$_node" --experimental-sea-config sea-tsserver.json ) && \
+  cp "$_node" "$SB_STAGE/bin/tsserver" && chmod 755 "$SB_STAGE/bin/tsserver" && \
+  ( cd "$SB_WORK/sea" && npm --no-audit --no-fund --silent exec --yes -- \
+      postject "$SB_STAGE/bin/tsserver" NODE_SEA_BLOB tsserver.blob \
+      --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 ) || \
+    warn "typescript: tsserver SEA skipped"
+fi
 
+# The injected binary is the whole tool; the stage carries only meta.json next
+# to it, so sb_finish copies it out as a bare executable.
 export SB_PATHS="bin"
 export SB_ENTRY="bin/tsc"
+export SB_ALIASES=""
+sb_alias "tsserver=bin/tsserver"
 sb_finish

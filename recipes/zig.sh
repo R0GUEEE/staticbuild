@@ -5,17 +5,20 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
+# The tarball is zig-<os>-<arch>-<version>.tar.xz; note the order, it is the
+# reverse of the triple everybody writes first.
 case "$SB_TARGET" in
-  linux-arm64)  _t=aarch64-linux ;;
-  linux-x86_64) _t=x86_64-linux ;;
-  macos-arm64)  _t=aarch64-macos ;;
+  linux-arm64)  _os=linux;  _arch=aarch64 ;;
+  linux-x86_64) _os=linux;  _arch=x86_64 ;;
+  macos-arm64)  _os=macos;  _arch=aarch64 ;;
   *) die "zig: no host tarball for $SB_TARGET" ;;
 esac
 
-_url="https://ziglang.org/download/$SB_VERSION/zig-$_t-$SB_VERSION.tar.xz"
+_url="https://ziglang.org/download/$SB_VERSION/zig-$_os-$_arch-$SB_VERSION.tar.xz"
 src=$(sb_fetch "$_url")
 sb_unpack "$src" "$SB_WORK/src/zig"
-_root="$SB_WORK/src/zig/zig-$_t-$SB_VERSION"
+_root="$SB_WORK/src/zig/zig-$_os-$_arch-$SB_VERSION"
+[ -x "$_root/zig" ] || die "zig: unexpected tarball layout"
 
 # Ship the compiler and its std sources; drop the docs and the C headers we do
 # not need for the targets we ship. `zig env` still works: it reads the layout.

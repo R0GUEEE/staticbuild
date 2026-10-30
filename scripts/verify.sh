@@ -74,13 +74,43 @@ tool_binary() {  # bundle -> prints path to an executable entry
   fi
 }
 
-check_elf() {
+# Libraries a target is allowed to expect from the base system. A `layer`/`sfx`
+# bundle is a vendored toolchain, not a static executable; the honest claim is
+# "everything it needs is either in the payload or in the target's libc".
+system_lib() {
+  case "$1" in
+    libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|libutil.so.1|ld-linux-*|\
+    libgcc_s.so.1|libstdc++.so.6|libz.so.1|libresolv.so.2|libnsl.so.1|libcrypt.so.1|\
+    libtinfo.so.6|libncursesw.so.6|libgcc_s.so.*|libatomic.so.1) return 0 ;;
+  esac
+  return 1
+}
+
+check_elf() {  # check_elf BIN [TIER] [ROOT]
   _bin=$1
+  _tier=${2:-static}
+  _root=${3:-}
   if ! readelf -d "$_bin" 2>/dev/null | grep -q NEEDED; then
     ok "static: no DT_NEEDED entries"
   else
     _libs=$(readelf -d "$_bin" | grep NEEDED | sed 's/.*\[//; s/\].*//' | tr '\n' ' ')
-    bad "ELF is dynamically linked: $_libs"
+    if [ "$_tier" = static ]; then
+      bad "ELF is dynamically linked: $_libs"
+    else
+      _missing=""
+      for _l in $_libs; do
+        system_lib "$_l" && continue
+        if [ -n "$_root" ] && find "$_root" -name "$_l" -print -quit 2>/dev/null | grep -q .; then
+          continue
+        fi
+        _missing="$_missing $_l"
+      done
+      if [ -n "$_missing" ]; then
+        bad "needs libraries neither in the payload nor in the base system:$_missing"
+      else
+        ok "vendored ($_tier): $_libs — all satisfied by payload or base libc"
+      fi
+    fi
   fi
   if readelf -h "$_bin" | grep -q 'DYN (Position-Independent Executable'; then
     ok "PIE (required by iOS 11+ and preferred everywhere)"
@@ -129,7 +159,7 @@ name = sys.argv[2]
 for t in m["tools"]:
     for tgt, blk in t.get("targets", {}).items():
         if name.startswith(t["id"] + "-") and name.endswith("-" + tgt):
-            print(t["id"], blk.get("size_budget_mb", 0), blk.get("smoke", ""), tgt, sep="\t")
+            print(t["id"], blk.get("size_budget_mb", 0), blk.get("smoke", ""), tgt, blk.get("tier", "sfx"), sep="\t")
             sys.exit(0)
 print("\t0\t\t")
 SBLOOKUP
@@ -138,6 +168,7 @@ SBLOOKUP
   _mb=$(echo "$_budget" | cut -f2)
   _smoke=$(echo "$_budget" | cut -f3)
   _tgt=$(echo "$_budget" | cut -f4)
+  _tier=$(echo "$_budget" | cut -f5)
 
   # A bundle's first four bytes are the ELF/Mach-O magic of its stub, so the
   # trailer is the only reliable discriminator.
@@ -154,7 +185,7 @@ SBLOOKUP
     check_leaks "$_root"
     case "$(file -b "$_bin")" in
       *Mach-O*) check_macho "$_bin" ;;
-      *ELF*)    check_elf "$_bin" ;;
+      *ELF*)    check_elf "$_bin" "${_tier:-sfx}" "$_root" ;;
       *)        bad "entrypoint is neither ELF nor Mach-O" ;;
     esac
   else
@@ -164,7 +195,7 @@ SBLOOKUP
       *) bad "not an ELF, not a Mach-O and not a bundle"; return ;;
     esac
     check_leaks "$_artifact"
-    if [ "$_kind" = elf ]; then check_elf "$_artifact"; else check_macho "$_artifact"; fi
+    if [ "$_kind" = elf ]; then check_elf "$_artifact" "${_tier:-static}"; else check_macho "$_artifact"; fi
     _bin=$_artifact
   fi
 
@@ -184,6 +215,12 @@ SBLOOKUP
     mkdir -p "$TMP/run"
     ln -sf "$(cd "$(dirname "$_exec")" && pwd)/$(basename "$_exec")" "$TMP/run/${_id:-$(basename "$_artifact")}"
     _bindir=$TMP/run
+    # The payload's own bin/ goes on PATH: `clang --version` and `java -version`
+    # are how these tools are actually invoked, and a bare symlink named after
+    # the *bundle* cannot answer that.
+    if [ -n "${_root:-}" ] && [ -d "$_root/bin" ]; then
+      _bindir="$_root/bin:$_bindir"
+    fi
     if ( cd "$TMP" && env -i PATH="$_bindir:/usr/bin:/bin" HOME="$TMP" TMPDIR="$TMP" \
            SB_CACHE="$TMP/cache" sh -c "$_smoke" ) >"$TMP/smoke.log" 2>&1; then
       ok "smoke: $_smoke"

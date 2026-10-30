@@ -24,13 +24,18 @@ mkdir -p "$SB_STAGE/go"
 ( cd "$GOROOT" && tar -cf - --exclude='pkg/obj' --exclude='pkg/bootstrap' . ) | \
   ( cd "$SB_STAGE/go" && tar -xf - )
 
-# Trim the test corpus: it is 40% of the tree and nothing downstream compiles it.
-rm -rf "$SB_STAGE/go/test" "$SB_STAGE/go/pkg/obj"
+# Trim the test corpus and the C sources used only to bootstrap: nothing
+# downstream compiles them, and together they are most of the payload.
+rm -rf "$SB_STAGE/go/test" "$SB_STAGE/go/pkg/obj" "$SB_STAGE/go/api" \
+       "$SB_STAGE/go/doc" "$SB_STAGE/go/misc"
+find "$SB_STAGE/go/src" -name 'testdata' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "$SB_STAGE/go/src" -name '*_test.go' -delete 2>/dev/null || true
 find "$SB_STAGE/go/pkg" -name '*_test*' -delete 2>/dev/null || true
 
 mkdir -p "$SB_STAGE/bin"
 ln -s ../go/bin/go "$SB_STAGE/bin/go"
 ln -s ../go/bin/gofmt "$SB_STAGE/bin/gofmt"
+sb_alias "gofmt=bin/gofmt"
 
 export SB_ENV='"GOROOT": "${ROOT}/go", "GOTOOLCHAIN": "local"'
 export SB_PATHS="bin"

@@ -17,6 +17,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "manifest", "tools.json")
 
+# `container` is the default build image. A tool whose upstream binaries are
+# glibc-linked (swift, java, node) overrides it per target with `"image":`.
 TARGETS = {
     "linux-arm64": {"runs-on": "ubuntu-24.04-arm", "container": "alpine:3.21", "family": "elf"},
     "linux-x86_64": {"runs-on": "ubuntu-24.04", "container": "alpine:3.21", "family": "elf"},
@@ -70,6 +72,8 @@ def main():
                     problems.append(f"{t['id']}: unknown target {name}")
                 if blk.get("status", "ga") not in ("ga", "experimental", "not-supported", "planned"):
                     problems.append(f"{t['id']}/{name}: bad status {blk['status']}")
+                if blk.get("image") and TARGETS[name]["container"] is None:
+                    problems.append(f"{t['id']}/{name}: image override is only meaningful for ELF targets")
                 if blk.get("status", "ga") in ("ga", "experimental") and not blk.get("entry"):
                     problems.append(f"{t['id']}/{name}: buildable but no entry")
         for p in problems:
@@ -98,7 +102,8 @@ def main():
             "tier": blk.get("tier", "sfx"),
             "runs-on": TARGETS[tid]["runs-on"],
             "container": TARGETS[tid]["container"] or "",
-            "image": TARGETS[tid]["container"] or "",
+            "image": blk.get("image") or TARGETS[tid]["container"] or "",
+            "timeout": blk.get("timeout", 240),
             "family": TARGETS[tid]["family"],
             "budget_mb": blk.get("size_budget_mb", 0),
             "smoke": blk.get("smoke", ""),

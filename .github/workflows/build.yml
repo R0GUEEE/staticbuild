@@ -1,9 +1,10 @@
 name: build
 
 # One job per (tool, target), matrix generated from manifest/tools.json.
-# ELF targets build inside an arm64 Alpine container (docker run, because
-# GitHub's JavaScript actions refuse to run inside an arm64 container);
-# Mach-O targets build natively on macOS.
+# ELF targets build inside a container (docker run, because GitHub's JavaScript
+# actions refuse to run inside an arm64 container); the image comes from the
+# manifest so a glibc-only upstream toolchain (swift, java, node) can pick
+# ubuntu while the pure source builds stay on musl. Mach-O builds natively.
 on:
   push:
     branches: [main]
@@ -78,7 +79,7 @@ jobs:
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.elfc) }}
     runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: 240
+    timeout-minutes: ${{ fromJSON(matrix.timeout) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -86,33 +87,27 @@ jobs:
           path: build/cache
           key: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
           restore-keys: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
-      - name: build in alpine
+      - name: build in container
         run: |
           docker run --rm \
             -v "$PWD":/work -w /work \
             -e SB_TARGET="${{ matrix.target }}" \
             -e SB_SKIP_VERIFY=0 \
-            "${{ matrix.image }}" /bin/sh -c '
-              set -eu
-              apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz go file binutils \
-                tar gzip bzip2 perl pkgconf make autoconf automake libtool \
-                zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
-                gettext-dev libffi-dev libxml2-dev
-              sh scripts/deps.sh "${{ matrix.id }}" || true
-              make "tools/${{ matrix.id }}" TARGET="$SB_TARGET" JOBS=$(getconf _NPROCESSORS_ONLN)
-            '
+            -e CI=1 \
+            "${{ matrix.image }}" /bin/sh scripts/in-container.sh '${{ matrix.id }}' '${{ matrix.target }}'
           sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
       - name: size
         run: |
           ls -l dist/
           { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
           path: |
             dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
             dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   macho:
@@ -124,7 +119,7 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.plan.outputs.macho) }}
     runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: 240
+    timeout-minutes: ${{ fromJSON(matrix.timeout) }}
     steps:
       - uses: actions/checkout@v4
       - name: build deps
@@ -141,10 +136,11 @@ jobs:
           ls -l dist/
           { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
           path: |
             dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
             dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14

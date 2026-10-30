@@ -74,6 +74,7 @@ sb_init() {
   SB_PATHS=${SB_PATHS:-bin}
   SB_ENV=${SB_ENV:-}
   SB_REQUIRE=${SB_REQUIRE:-}
+  SB_ALIASES=${SB_ALIASES:-}
 
   log "$SB_TOOL $SB_VERSION → $SB_TARGET ($SB_EFFECTIVE_TIER, $SB_TRIPLE)"
   if [ "$SB_FAMILY" = elf ] && [ "$(uname -s)" = Darwin ]; then
@@ -176,6 +177,27 @@ sb_symlinks() {  # sb_symlinks BIN... -- link every name to the bundle's bin/<SB
   done
 }
 
+# Declare extra command names this bundle answers to: sb_alias npm=bin/npm ...
+# The stub dispatches `<bundle> --sb-run npm` and a symlink named `npm`.
+sb_alias() {
+  for _a in "$@"; do
+    case "$_a" in
+      *=*) SB_ALIASES="${SB_ALIASES}${_a}
+" ;;
+      *) die "sb_alias expects name=path, got '$_a'" ;;
+    esac
+  done
+}
+
+# A wrapper script in bin/ plus an alias for it.
+sb_wrapper() {  # sb_wrapper NAME < script-body
+  _name=$1
+  mkdir -p "$SB_STAGE/bin"
+  cat > "$SB_STAGE/bin/$_name"
+  chmod 755 "$SB_STAGE/bin/$_name"
+  sb_alias "$_name=bin/$_name"
+}
+
 # Turn $SB_STAGE/<rel> into a hash-addressed layer shared across bundles.
 # The stub rewrites the @@SB_LAYER@@ token to an absolute path under the cache.
 sb_layer() {
@@ -238,12 +260,29 @@ sb_meta() {
     printf '  "paths": [%s],\n' "$(sb_json_list "$SB_PATHS")"
     printf '  "require": [%s],\n' "$(sb_json_list "$SB_REQUIRE")"
     printf '  "env": {%s},\n' "${SB_ENV:-}"
+    printf '  "aliases": {%s},\n' "$(sb_json_map "${SB_ALIASES:-}")"
     printf '  "layers": [%s],\n' "$(sb_json_list "${SB_LAYERS:-}")"
     printf '  "built": %s\n' "$SB_EPOCH"
     printf '}\n'
   } > "$SB_STAGE/.sb/meta.json"
   python3 -c 'import json,sys;json.load(open(sys.argv[1]))' "$SB_STAGE/.sb/meta.json" \
     || die "generated meta.json is not valid JSON"
+}
+
+sb_json_map() {  # newline-separated name=path -> "name": "path", ...
+  python3 - "$@" <<'PY'
+import json, sys
+pairs = []
+for chunk in sys.argv[1:]:
+    for line in chunk.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        k, _, v = line.partition("=")
+        if k and v:
+            pairs.append((k, v))
+print(", ".join(json.dumps(k) + ": " + json.dumps(v) for k, v in pairs))
+PY
 }
 
 sb_json_list() {
@@ -278,7 +317,7 @@ sb_finish() {
     static|macho)
       # A single executable: it *is* the payload, so there is nothing to pack.
       # We still wrap it when the tree carries more than the entry (share/, include/).
-      if [ "$(find "$SB_STAGE" -type f | wc -l)" -gt 2 ]; then
+      if [ -n "${SB_ALIASES:-}" ] || [ "$(find "$SB_STAGE" -type f | wc -l)" -gt 2 ]; then
         python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags
       else
         cp "$SB_STAGE/$SB_ENTRY" "$_out"

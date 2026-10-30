@@ -31,8 +31,18 @@ for _t in aarch64-apple-ios aarch64-apple-ios-sim; do
   fi
 done
 
+# Docs and man pages are ~40 MiB of nothing a compiler reads.
+rm -rf "$SB_STAGE/rust/share/doc" "$SB_STAGE/rust/share/man" "$SB_STAGE/rust/lib/rustlib/etc"
+# The musl host toolchain is already static, but release binaries carry ~30 MiB
+# of symbols each; strip() is the difference between 420 MiB and 300 MiB.
+if command -v strip >/dev/null 2>&1; then
+  for f in "$SB_STAGE/rust/bin"/*; do
+    [ -f "$f" ] && strip -x "$f" 2>/dev/null || true
+  done
+fi
+
 mkdir -p "$SB_STAGE/bin"
-for b in rustc cargo rustdoc rustfmt clippy-driver cargo-clippy rust-lld; do
+for b in rustc cargo rustdoc rustfmt clippy-driver cargo-clippy rust-lld rust-gdb; do
   [ -f "$SB_STAGE/rust/bin/$b" ] && ln -sf "../rust/bin/$b" "$SB_STAGE/bin/$b"
 done
 

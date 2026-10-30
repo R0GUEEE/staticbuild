@@ -15,14 +15,14 @@ sb_cd "$SB_WORK/src/dpkg/dpkg-$SB_VERSION"
   --disable-update-alternatives --without-libselinux --disable-nls \
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static -s)"
 
-make -C lib -j "$SB_JOBS"
+make -C lib -j "$SB_JOBS" || die "dpkg: libdpkg failed"
 make -C src -j "$SB_JOBS" dpkg-deb dpkg-split dpkg-query 2>/dev/null || \
-  make -C src -j "$SB_JOBS"
+  make -C src -j "$SB_JOBS" || die "dpkg: tools failed"
 
 for t in dpkg-deb dpkg-split dpkg-query; do
-  [ -x "src/$t" ] && sb_bin "src/$t" "$t"
+  [ -x "src/$t" ] || die "dpkg: $t was not built"
+  sb_bin "src/$t" "$t"
 done
-sb_bin src/dpkg-deb dpkg-deb >/dev/null 2>&1 || true
 
 # dpkg-deb links libdpkg.a; if the shared build slipped through, fail loudly here
 # rather than in a user's bundle.

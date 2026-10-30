@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -61,6 +62,9 @@ type Meta struct {
 	Layers  []string          `json:"layers"` // layer hashes carried in layers/<sha>/
 	Layered bool              `json:"layered"`
 	Require []string          `json:"require"` // host binaries the bundle shells out to, if any
+	// Aliases maps a multi-call name to a payload-relative script or binary.
+	// `<bundle> --sb-run npm i` and a symlink named `npm` both land here.
+	Aliases map[string]string `json:"aliases,omitempty"`
 }
 
 func main() {
@@ -72,7 +76,10 @@ func main() {
 		fatal(err)
 	}
 
-	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--sb-") {
+	// --sb-run / --sb-list are dispatch, not introspection, and they need the
+	// payload; keep them out of the flag block below.
+	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--sb-") &&
+		os.Args[1] != "--sb-run" && os.Args[1] != "--sb-list" {
 		if err := inspect(self, os.Args[1:]); err != nil {
 			fatal(err)
 		}
@@ -87,9 +94,43 @@ func main() {
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
-	if err := execBundle(meta, root, os.Args[1:]); err != nil {
+	entry, args := selectEntry(meta, filepath.Base(self), os.Args[1:])
+	if err := execBundle(meta, root, entry, args); err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
+}
+
+// selectEntry resolves multi-call dispatch, in this order:
+//
+//	<bundle> --sb-run NAME args...   explicit, always wins
+//	<symlink named NAME> args...     argv[0] match against meta.aliases
+//	<bundle> args...                 meta.entry
+//
+// Bundles that carry more than one usable program (node+npm, java+javac) need
+// this: the payload has one entry point but the user has several commands.
+func selectEntry(meta *Meta, invoked string, args []string) (string, []string) {
+	if len(args) >= 2 && args[0] == "--sb-run" {
+		if p, ok := meta.Aliases[args[1]]; ok {
+			return p, args[2:]
+		}
+		fatalf("%s: no program %q (try --sb-list)", meta.Tool, args[1])
+	}
+	if len(args) >= 1 && args[0] == "--sb-list" {
+		fmt.Printf("%s %s\n  %s\t%s (default)\n", meta.Tool, meta.Version, meta.Entry, filepath.Base(meta.Entry))
+		names := make([]string, 0, len(meta.Aliases))
+		for k := range meta.Aliases {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		for _, k := range names {
+			fmt.Printf("  %s\t%s\n", k, meta.Aliases[k])
+		}
+		os.Exit(0)
+	}
+	if p, ok := meta.Aliases[invoked]; ok {
+		return p, args
+	}
+	return meta.Entry, args
 }
 
 // readTrailer pulls and validates the fixed-size trailer.
@@ -282,10 +323,10 @@ func readMeta(root string) (*Meta, error) {
 }
 
 // execBundle builds the child environment and replaces this process.
-func execBundle(meta *Meta, root string, args []string) error {
-	path := filepath.Join(root, meta.Entry)
+func execBundle(meta *Meta, root, entry string, args []string) error {
+	path := filepath.Join(root, entry)
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("entrypoint %s missing after extraction: %w", meta.Entry, err)
+		return fmt.Errorf("entrypoint %s missing after extraction: %w", entry, err)
 	}
 
 	env := make([]string, 0, len(os.Environ())+8)
