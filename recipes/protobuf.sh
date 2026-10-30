@@ -11,6 +11,7 @@ if [ ! -d "$SB_WORK/src/protobuf/.git" ]; then
 fi
 sb_cd "$SB_WORK/src/protobuf"
 
+# shellcheck disable=SC2046 # deliberate word splitting
 cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -Dprotobuf_BUILD_TESTS=OFF \

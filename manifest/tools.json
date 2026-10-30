@@ -22,7 +22,7 @@
    "goarch": "arm64",
    "family": "macho",
    "abi": "iphoneos",
-   "runs_on": "macos-14",
+   "runs_on": "macos-15",
    "container": null,
    "meaning": "Mach-O for the iOS sandbox: nothing imported beyond libSystem/libc++/Foundation, code-signed by the host app"
   },
@@ -33,7 +33,7 @@
    "goarch": "arm64",
    "family": "macho",
    "abi": "iphonesimulator",
-   "runs_on": "macos-14",
+   "runs_on": "macos-15",
    "container": null,
    "meaning": "simulator slice, for running the bundle in an iOS Simulator lane"
   },
@@ -111,7 +111,7 @@
    "goarch": "arm64",
    "family": "macho",
    "abi": "macos",
-   "runs_on": "macos-14",
+   "runs_on": "macos-15",
    "container": null,
    "meaning": "Mach-O importing only the dyld shared cache; host tool for cross-building iOS products"
   },
@@ -122,7 +122,7 @@
    "goarch": "universal",
    "family": "macho",
    "abi": "macos",
-   "runs_on": "macos-14",
+   "runs_on": "macos-15",
    "container": null,
    "fat": [
     "arm64",
@@ -137,7 +137,7 @@
    "goarch": "amd64",
    "family": "macho",
    "abi": "macos",
-   "runs_on": "macos-13",
+   "runs_on": "macos-15-intel",
    "container": null,
    "meaning": "Intel Mac slice; lipo'd with arm64 into macos-universal"
   },
@@ -968,8 +968,8 @@
     },
     "linux-386": {
      "tier": "layer",
-     "status": "ga",
-     "notes": "linux-386 tarball",
+     "status": "experimental",
+     "notes": "needs a 32-bit runner: docker --platform linux/386 with binfmt, or a 32-bit Windows image. linux-386 tarball",
      "size_budget_mb": 240,
      "entry": "bin/go",
      "paths": [
@@ -1824,8 +1824,8 @@
     },
     "linux-386": {
      "tier": "static",
-     "status": "ga",
-     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (32-bit x86)",
+     "status": "experimental",
+     "notes": "needs a 32-bit runner: docker --platform linux/386 with binfmt, or a 32-bit Windows image. GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (32-bit x86)",
      "size_budget_mb": 3,
      "entry": "bin/make",
      "paths": [
@@ -2140,8 +2140,8 @@
     },
     "linux-386": {
      "tier": "static",
-     "status": "ga",
-     "notes": "32-bit x86 build",
+     "status": "experimental",
+     "notes": "needs a 32-bit runner: docker --platform linux/386 with binfmt, or a 32-bit Windows image. 32-bit x86 build",
      "size_budget_mb": 3,
      "entry": "bin/ninja",
      "paths": [

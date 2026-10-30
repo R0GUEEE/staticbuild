@@ -8,6 +8,7 @@ src=$(sb_fetch "https://github.com/libarchive/libarchive/releases/download/v$SB_
 sb_unpack "$src" "$SB_WORK/src/libarchive"
 sb_cd "$SB_WORK/src/libarchive/libarchive-$SB_VERSION"
 
+# shellcheck disable=SC2046 # deliberate word splitting
 cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \

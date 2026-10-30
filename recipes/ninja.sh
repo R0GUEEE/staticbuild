@@ -15,10 +15,12 @@ case "$SB_FAMILY" in
     # is CMake, and cross-configuring CMake for mingw is more moving parts than
     # compiling the 20 files directly.
     _cc=$(sb_cc); _cxx=$(printf '%s' "$_cc" | sed 's/gcc$/g++/; s/cc$/c++/')
+    # shellcheck disable=SC2046 # deliberate word splitting
     $_cxx -O2 -std=c++17 $(sb_cflags) -o ninja.exe src/*.cc || die "ninja: mingw build failed"
     sb_bin ninja.exe ninja.exe
     ;;
   elf)
+    # shellcheck disable=SC2046 # deliberate word splitting
     cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_C_FLAGS="-O2" -DCMAKE_CXX_FLAGS="-O2" \
@@ -28,6 +30,7 @@ case "$SB_FAMILY" in
     sb_bin out/ninja ninja
     ;;
   macho)
+    # shellcheck disable=SC2046 # deliberate word splitting
     cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$SB_ARCH" \

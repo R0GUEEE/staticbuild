@@ -101,7 +101,6 @@ jobs:
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ${{ matrix.runs_on }}
-    container: ${{ matrix.container || null }}
     name: ${{ matrix.name }}
     defaults:
       run:
@@ -109,12 +108,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: toolchain (ELF container)
-        if: matrix.family == 'elf'
-        run: |
-          apk add --no-cache build-base cmake ninja py3-pip python3 unzip curl \
-            git perl bash zstd xz tar file binutils ${{ matrix.image || '' }} 2>/dev/null || \
-          apk add --no-cache build-base cmake ninja python3 unzip curl git perl bash zstd xz tar file
+      # The carrier stub must exist before any recipe runs: recipes never build
+      # one themselves, they expect `scripts/stub-build.sh` to have populated
+      # build/stub (the stubs job does exactly that, for every target, once).
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: stubs-linux
+          path: build/stub
+      - uses: actions/download-artifact@v4
+        if: matrix.family == 'macho'
+        continue-on-error: true
+        with:
+          name: stubs-macos
+          path: build/stub
 
       - uses: actions/setup-go@v5
         if: matrix.family != 'elf'
@@ -131,24 +138,32 @@ jobs:
         if: matrix.family == 'macho'
         run: brew install cmake ninja zstd 2>/dev/null || true
 
-      - name: stub
+      - name: stub (fallback)
         run: |
-          mkdir -p build/stub
-          if [ "${{ matrix.family }}" = "macho" ]; then
-            cp -r artifacts/stubs-macos/. build/stub/ 2>/dev/null || true
-          fi
+          ls -l build/stub 2>/dev/null || true
           if [ ! -x "build/stub/sb-stub-${{ matrix.target }}" ]; then
             sh scripts/stub-build.sh "${{ matrix.target }}" || true
           fi
-          ls -l build/stub || true
+          test -x "build/stub/sb-stub-${{ matrix.target }}" \
+            || { echo "::error::no carrier stub for ${{ matrix.target }}"; exit 1; }
 
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: stubs-linux
-          path: build/stub
+      # Alpine on arm64 cannot host GitHub's JavaScript actions, so the ELF
+      # build runs in `docker run` on the host instead of a `container:` job.
+      - name: build (ELF, inside docker)
+        if: matrix.family == 'elf'
+        run: |
+          set -eu
+          docker run --rm -v "$PWD:/w" -w /w \
+            -e SB_JOBS=2 -e SOURCE_DATE_EPOCH=1700000000 \
+            ${{ matrix.image || 'alpine:3.21' }} sh -c '
+              apk add --no-cache build-base cmake ninja python3 curl git perl bash \
+                zstd xz tar file unzip binutils > /dev/null
+              make "tools/${{ matrix.tool }}" "TARGET=${{ matrix.target }}"
+            '
+          sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
 
-      - name: build
+      - name: build (native)
+        if: matrix.family != 'elf'
         env:
           SB_JOBS: '2'
         run: make "tools/${{ matrix.tool }}" TARGET="${{ matrix.target }}"

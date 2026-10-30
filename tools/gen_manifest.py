@@ -51,19 +51,19 @@ TARGETS = {
                         abi="mingw-w64", runs_on="windows-2022", container=None,
                         meaning="32-bit PE for legacy Windows; still useful for 32-bit-only toolchains"),
     "macos-arm64": dict(os="macos", arch="arm64", goos="darwin", goarch="arm64", family="macho",
-                        abi="macos", runs_on="macos-14", container=None,
+                        abi="macos", runs_on="macos-15", container=None,
                         meaning="Mach-O importing only the dyld shared cache; host tool for cross-building iOS products"),
     "macos-x86_64": dict(os="macos", arch="x86_64", goos="darwin", goarch="amd64", family="macho",
-                         abi="macos", runs_on="macos-13", container=None,
+                         abi="macos", runs_on="macos-15-intel", container=None,
                          meaning="Intel Mac slice; lipo'd with arm64 into macos-universal"),
     "macos-universal": dict(os="macos", arch="universal", goos="darwin", goarch="universal", family="macho",
-                            abi="macos", runs_on="macos-14", container=None, fat=["arm64", "x86_64"],
+                            abi="macos", runs_on="macos-15", container=None, fat=["arm64", "x86_64"],
                             meaning="fat Mach-O (arm64 + x86_64): one download for Apple Silicon and Intel, both slices carrying native payloads"),
     "ios-arm64": dict(os="ios", arch="arm64", goos="ios", goarch="arm64", family="macho",
-                      abi="iphoneos", runs_on="macos-14", container=None,
+                      abi="iphoneos", runs_on="macos-15", container=None,
                       meaning="Mach-O for the iOS sandbox: nothing imported beyond libSystem/libc++/Foundation, code-signed by the host app"),
     "ios-arm64-sim": dict(os="ios", arch="arm64", goos="iossimulator", goarch="arm64", family="macho",
-                          abi="iphonesimulator", runs_on="macos-14", container=None,
+                          abi="iphonesimulator", runs_on="macos-15", container=None,
                           meaning="simulator slice, for running the bundle in an iOS Simulator lane"),
     "windows-universal": dict(os="windows", arch="universal", goos="windows", goarch="amd64", family="pe",
                               abi="mingw-w64", runs_on="windows-2022", container=None, fat=["x86_64", "arm64"],
@@ -624,6 +624,16 @@ DEMOTE = {
 
 
 def demote(tools):
+    # 32-bit targets need an emulated runner (qemu binfmt for linux/386, a
+    # 32-bit Windows image for windows/386). The default matrix does not
+    # configure either, so a ga claim would be a lie.
+    for tool in tools:
+        for name, block in tool["targets"].items():
+            if name.endswith("-386") and block.get("status") == "ga":
+                block["status"] = "experimental"
+                block["notes"] = ("needs a 32-bit runner: docker --platform linux/386 "
+                                  "with binfmt, or a 32-bit Windows image. "
+                                  + block.get("notes", ""))
     for tool in tools:
         for pattern, reason in DEMOTE.get(tool["id"], []):
             for name, block in tool["targets"].items():

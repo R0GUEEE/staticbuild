@@ -65,7 +65,7 @@ esac
 export SB_EXE
 
 SB_EFFECTIVE_TIER=${SB_TIER:-sfx}
-export SB_ARCH SB_TRIPLE SB_FAMILY SB_EFFECTIVE_TIER
+export SB_ARCH SB_TRIPLE SB_FAMILY SB_EFFECTIVE_TIER SB_OS SB_GOARCH
 
 # Progress goes to stderr: recipes capture function output in $( ) to get paths
 # (src=$(sb_fetch ...)), so a chatty stdout corrupts the value. This bit CI once.
