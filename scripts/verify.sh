@@ -186,7 +186,16 @@ SBLOOKUP
     case "$(file -b "$_bin")" in
       *Mach-O*) check_macho "$_bin" ;;
       *ELF*)    check_elf "$_bin" "${_tier:-sfx}" "$_root" ;;
-      *)        bad "entrypoint is neither ELF nor Mach-O" ;;
+      *script*)
+        # A meta-tool (theos, meson) dispatches into the payload; the entry is
+        # the interface, not the binary. Check the interpreter it names.
+        _sh=$(head -1 "$_bin" | sed 's/^#!//; s/ .*//')
+        if [ -x "$_bin" ] && [ -x "$_sh" ]; then
+          ok "entrypoint $_entry is a script ($_sh)"
+        else
+          bad "entrypoint $_entry is a script with a missing interpreter ($_sh)"
+        fi ;;
+      *)        bad "entrypoint is neither ELF, Mach-O nor a script" ;;
     esac
   else
     _kind=$(file_kind "$_artifact")

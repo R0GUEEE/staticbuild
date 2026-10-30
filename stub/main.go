@@ -1,71 +1,39 @@
-// Command sb-stub is the self-extracting prefix of every .sfx bundle produced by
-// this repository. It is compiled once per target as a fully static musl/ELF
-// binary (~4 MB), and scripts/pack.sh concatenates it with a zstd-compressed tar
-// payload and a 64-byte trailer.
+// Command sb-stub is the carrier of every bundle this repository produces.
 //
-// At run time it validates the trailer, extracts the payload into a
-// content-addressed cache (shared across every bundle that carries the same
-// layer), and execve()s the real entrypoint with the environment the bundle
-// declares.
+// It is compiled once per target (ELF, Mach-O, PE; static, CGO off) and
+// scripts/pack.py appends the payload, so the artifact is: this binary, a blob
+// region, an index, a trailer.
+//
+// At run time it validates the trailer and index digest, extracts the payload
+// matching the host into a content-addressed cache (shared across every bundle
+// that carries the same layer), and hands the process to the real program.
+//
+// Introspection flags never touch the payload:
+//
+//	--sb-version            stub + index digest
+//	--sb-print-index        full payload catalogue as JSON
+//	--sb-print-meta         metadata of the payload this host would run
+//	--sb-payloads           one line per payload
+//	--sb-list               commands this bundle answers to
+//	--sb-cache              extraction root
+//	--sb-clean              remove the extraction root
+//	--sb-extract-dir DIR    materialise the tree and stop
+//	--sb-payload ID         run a specific payload (cross-form testing)
+//	--sb-run NAME args...   run an alias (npm, javac, clang++)
 package main
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"sort"
 	"path/filepath"
 	"runtime"
-	"strconv"
+	"sort"
 	"strings"
-	"syscall"
-	"time"
-
 )
 
-const (
-	magic       = "SBX1"
-	trailerSize = 64
-	flagLayered = 1 << 0 // payload carries layers/<sha>/ trees, not just files
-	flagSealed  = 1 << 1 // payload sha256 verified by the packer at build time
-)
-
-// Trailer is the last 64 bytes of a bundle.
-//
-//	 0..3   magic "SBX1"
-//	 4..5   uint16 version
-//	 6..7   uint16 flags
-//	 8..15  uint64 payload offset
-//	16..23  uint64 payload size
-//	24..55  [32]byte sha256 of the payload
-//	56..63  uint64 build epoch (SOURCE_DATE_EPOCH)
-type Trailer struct {
-	Version uint16
-	Flags   uint16
-	Offset  uint64
-	Size    uint64
-	Sum     [32]byte
-	Epoch   uint64
-}
-
-// Meta is .sb/meta.json, the only file the stub requires inside the payload.
-type Meta struct {
-	Tool    string            `json:"tool"`
-	Version string            `json:"version"`
-	Entry   string            `json:"entry"`  // path relative to bundle root
-	Paths   []string          `json:"paths"`  // added to PATH, in order, before the host PATH
-	Env     map[string]string `json:"env"`    // extra environment, ${ROOT} expanded
-	Layers  []string          `json:"layers"` // layer hashes carried in layers/<sha>/
-	Layered bool              `json:"layered"`
-	Require []string          `json:"require"` // host binaries the bundle shells out to, if any
-	// Aliases maps a multi-call name to a payload-relative script or binary.
-	// `<bundle> --sb-run npm i` and a symlink named `npm` both land here.
-	Aliases map[string]string `json:"aliases,omitempty"`
-}
+const stubVersion = "2.0.0"
 
 func main() {
 	self, err := os.Executable()
@@ -76,398 +44,221 @@ func main() {
 		fatal(err)
 	}
 
-	// --sb-run / --sb-list are dispatch, not introspection, and they need the
-	// payload; keep them out of the flag block below.
-	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--sb-") &&
-		os.Args[1] != "--sb-run" && os.Args[1] != "--sb-list" {
-		if err := inspect(self, os.Args[1:]); err != nil {
-			fatal(err)
+	args := os.Args[1:]
+	dispatch := len(args) >= 1 && (args[0] == "--sb-run" || args[0] == "--sb-list")
+	if len(args) >= 1 && strings.HasPrefix(args[0], "--sb-") && !dispatch {
+		if err := inspect(self, args); err != nil {
+			fatalf("%s: %v", filepath.Base(self), err)
 		}
 		return
 	}
 
-	tr, err := readTrailer(self)
+	b, err := openBundle(self)
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
-	meta, root, err := materialize(self, tr, nil)
+	forced := os.Getenv("SB_PAYLOAD")
+	payload, err := b.resolvePayload(forced)
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
-	entry, args := selectEntry(meta, filepath.Base(self), os.Args[1:])
-	if err := execBundle(meta, root, entry, args); err != nil {
+	root, err := b.materialize(payload, "")
+	if err != nil {
+		fatalf("%s: %v", filepath.Base(self), err)
+	}
+	entry, rest := selectEntry(b, payload, filepath.Base(self), args)
+	prog := entry
+	if !filepath.IsAbs(prog) {
+		prog = filepath.Join(root, filepath.FromSlash(entry))
+	}
+	if err := execBundle(prog, append([]string{prog}, rest...), bundleEnv(payload, root)); err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
 }
 
-// selectEntry resolves multi-call dispatch, in this order:
+func (b *Bundle) resolvePayload(forced string) (*Payload, error) {
+	if b.legacy {
+		return b.legacyPayload()
+	}
+	return b.selectPayload(forced)
+}
+
+// selectEntry resolves multi-call dispatch:
 //
-//	<bundle> --sb-run NAME args...   explicit, always wins
-//	<symlink named NAME> args...     argv[0] match against meta.aliases
-//	<bundle> args...                 meta.entry
-//
-// Bundles that carry more than one usable program (node+npm, java+javac) need
-// this: the payload has one entry point but the user has several commands.
-func selectEntry(meta *Meta, invoked string, args []string) (string, []string) {
+//	<bundle> --sb-run NAME args     explicit
+//	<symlink NAME> args             argv[0] against aliases
+//	<bundle> args                   the payload entry
+func selectEntry(b *Bundle, p *Payload, invoked string, args []string) (string, []string) {
 	if len(args) >= 2 && args[0] == "--sb-run" {
-		if p, ok := meta.Aliases[args[1]]; ok {
-			return p, args[2:]
+		if path, ok := p.Aliases[args[1]]; ok {
+			return path, args[2:]
 		}
-		fatalf("%s: no program %q (try --sb-list)", meta.Tool, args[1])
+		fatalf("%s: no program %q (try --sb-list)", invoked, args[1])
 	}
-	if len(args) >= 1 && args[0] == "--sb-list" {
-		fmt.Printf("%s %s\n  %s\t%s (default)\n", meta.Tool, meta.Version, meta.Entry, filepath.Base(meta.Entry))
-		names := make([]string, 0, len(meta.Aliases))
-		for k := range meta.Aliases {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		for _, k := range names {
-			fmt.Printf("  %s\t%s\n", k, meta.Aliases[k])
-		}
-		os.Exit(0)
+	if path, ok := p.Aliases[invoked]; ok {
+		return path, args
 	}
-	if p, ok := meta.Aliases[invoked]; ok {
-		return p, args
-	}
-	return meta.Entry, args
+	return p.Entry, args
 }
 
-// readTrailer pulls and validates the fixed-size trailer.
-func readTrailer(path string) (*Trailer, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+// bundleEnv builds the child environment: PATH gets the payload's own bin
+// directories first, then the tool's declared variables, then the host's.
+func bundleEnv(p *Payload, root string) []string {
+	sep := ":"
+	if runtime.GOOS == "windows" {
+		sep = ";"
 	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if fi.Size() < trailerSize {
-		return nil, errors.New("not a bundle: file smaller than trailer")
-	}
-	buf := make([]byte, trailerSize)
-	if _, err := f.ReadAt(buf, fi.Size()-trailerSize); err != nil {
-		return nil, err
-	}
-	if string(buf[0:4]) != magic {
-		return nil, errors.New("not a bundle: bad magic (is the payload truncated?)")
-	}
-	tr := &Trailer{
-		Version: binary.LittleEndian.Uint16(buf[4:6]),
-		Flags:   binary.LittleEndian.Uint16(buf[6:8]),
-		Offset:  binary.LittleEndian.Uint64(buf[8:16]),
-		Size:    binary.LittleEndian.Uint64(buf[16:24]),
-		Epoch:   binary.LittleEndian.Uint64(buf[56:64]),
-	}
-	copy(tr.Sum[:], buf[24:56])
-	if tr.Version != 1 {
-		return nil, fmt.Errorf("unsupported bundle version %d", tr.Version)
-	}
-	if tr.Offset+tr.Size != uint64(fi.Size()-trailerSize) {
-		return nil, errors.New("corrupt bundle: payload does not abut the trailer")
-	}
-	return tr, nil
-}
-
-// cacheDir resolves the extraction root. The order matters on iOS and in
-// CI: an explicit SB_CACHE always wins, then XDG, then HOME, then TMPDIR.
-func cacheDir() string {
-	if v := os.Getenv("SB_CACHE"); v != "" {
-		return v
-	}
-	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
-		return filepath.Join(v, "staticbuild")
-	}
-	if v := os.Getenv("HOME"); v != "" {
-		return filepath.Join(v, ".cache", "staticbuild")
-	}
-	return filepath.Join(os.TempDir(), "staticbuild-"+strconv.Itoa(os.Getuid()))
-}
-
-// bundleKey is the content address used for the extracted tree.
-func bundleKey(tr *Trailer) string { return hex.EncodeToString(tr.Sum[:12]) }
-
-// materialize extracts (or reuses) the bundle and returns its metadata and root.
-// If dest is non-empty the tree is written there directly, with layers inlined
-// and no cache lookup: that is the --sb-extract-dir path used when a downstream
-// project wants the SDK tree rather than the executable.
-func materialize(self string, tr *Trailer, dest *string) (*Meta, string, error) {
-	f, err := os.Open(self)
-	if err != nil {
-		return nil, "", err
-	}
-	defer f.Close()
-	payload := io.NewSectionReader(f, int64(tr.Offset), int64(tr.Size))
-
-	cache := cacheDir()
-	key := bundleKey(tr)
-
-	var root string
-	var tmp string
-	if dest != nil {
-		root = *dest
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			return nil, "", err
-		}
-	} else {
-		root = filepath.Join(cache, "b", key)
-		if ok, _ := os.Stat(filepath.Join(root, ".sb-ok")); ok != nil {
-			// already extracted by an earlier run (or a concurrent bundle)
-			if meta, err := readMeta(root); err == nil {
-				return meta, root, nil
-			}
-		}
-		if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
-			return nil, "", err
-		}
-		if err := acquire(filepath.Join(root + ".lock")); err != nil {
-			return nil, "", err
-		}
-		defer release(filepath.Join(root + ".lock"))
-		if _, err := os.Stat(filepath.Join(root, ".sb-ok")); err == nil {
-			if meta, err := readMeta(root); err == nil {
-				return meta, root, nil
-			}
-		}
-		tmp = fmt.Sprintf("%s.tmp-%d-%d", root, os.Getpid(), time.Now().UnixNano())
-		if err := os.MkdirAll(tmp, 0o755); err != nil {
-			return nil, "", err
-		}
-		root = tmp
-	}
-
-	meta, layers, err := extract(payload, root, tr)
-	if err != nil {
-		if tmp != "" {
-			os.RemoveAll(tmp)
-		}
-		return nil, "", err
-	}
-
-	if tmp != "" {
-		// Layered bundles: lift each layers/<sha>/ tree into the shared cache so
-		// that java, kotlin and gradle (or clang and clangd) pay for the JRE or
-		// libLLVM once on disk, then point the tool tree at it with symlinks.
-		if len(layers) > 0 {
-			shared := filepath.Join(cache, "l")
-			if err := os.MkdirAll(shared, 0o755); err != nil {
-				return nil, "", err
-			}
-			for _, sha := range layers {
-				src := filepath.Join(tmp, "layers", sha)
-				dst := filepath.Join(shared, sha)
-				if _, err := os.Stat(filepath.Join(dst, ".sb-ok")); err == nil {
-					continue
-				}
-				lock := dst + ".lock"
-				if err := acquire(lock); err == nil {
-					if _, err := os.Stat(filepath.Join(dst, ".sb-ok")); err != nil {
-						if err := os.RemoveAll(dst); err != nil {
-							release(lock)
-							return nil, "", err
-						}
-						if err := os.Rename(src, dst); err != nil {
-							release(lock)
-							return nil, "", err
-						}
-						writeOK(dst)
-					}
-					release(lock)
-				}
-			}
-			if err := rewriteLayerLinks(tmp, shared, layers); err != nil {
-				return nil, "", err
-			}
-			os.RemoveAll(filepath.Join(tmp, "layers"))
-		}
-
-		writeOK(tmp)
-		final := strings.TrimSuffix(tmp, tmp[strings.LastIndex(tmp, ".tmp-"):])
-		if err := os.Rename(tmp, final); err != nil {
-			os.RemoveAll(tmp)
-			if _, statErr := os.Stat(filepath.Join(final, ".sb-ok")); statErr != nil {
-				return nil, "", err
-			}
-		}
-		root = final
-	}
-
-	meta, err = readMeta(root)
-	if err != nil {
-		return nil, "", err
-	}
-	if dest != nil && len(layers) > 0 {
-		// inline mode leaves layers/ in place and fixes the links in-tree
-		if err := rewriteLayerLinks(root, filepath.Join(root, "layers"), layers); err != nil {
-			return nil, "", err
-		}
-	}
-	return meta, root, nil
-}
-
-func readMeta(root string) (*Meta, error) {
-	b, err := os.ReadFile(filepath.Join(root, ".sb", "meta.json"))
-	if err != nil {
-		return nil, fmt.Errorf("bundle is missing .sb/meta.json: %w", err)
-	}
-	m := &Meta{}
-	if err := json.Unmarshal(b, m); err != nil {
-		return nil, fmt.Errorf("bundle metadata is corrupt: %w", err)
-	}
-	if m.Entry == "" {
-		return nil, errors.New("bundle metadata has no entry")
-	}
-	return m, nil
-}
-
-// execBundle builds the child environment and replaces this process.
-func execBundle(meta *Meta, root, entry string, args []string) error {
-	path := filepath.Join(root, entry)
-	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("entrypoint %s missing after extraction: %w", entry, err)
-	}
-
-	env := make([]string, 0, len(os.Environ())+8)
-	drop := map[string]bool{
-		"LD_PRELOAD": true, "LD_LIBRARY_PATH": true, "LD_AUDIT": true,
-		"PYTHONHOME": true, "PYTHONPATH": true, "NODE_OPTIONS": true,
-		"JAVA_HOME": true, "CLASSPATH": true, "GEM_HOME": true, "PERL5LIB": true,
-	}
-	for _, kv := range os.Environ() {
-		if i := strings.IndexByte(kv, '='); i > 0 && drop[kv[:i]] {
+	dirs := make([]string, 0, len(p.Paths))
+	for _, d := range p.Paths {
+		if d == "" {
 			continue
 		}
-		env = append(env, kv)
-	}
-
-	env = append(env, "SB_BUNDLE_ROOT="+root)
-	env = append(env, "SB_BUNDLE_TOOL="+meta.Tool, "SB_BUNDLE_VERSION="+meta.Version)
-
-	if len(meta.Paths) > 0 {
-		parts := make([]string, 0, len(meta.Paths)+1)
-		for _, p := range meta.Paths {
-			parts = append(parts, filepath.Join(root, p))
+		if filepath.IsAbs(d) {
+			dirs = append(dirs, d)
+			continue
 		}
-		parts = append(parts, os.Getenv("PATH"))
-		env = append(env, "PATH="+strings.Join(parts, ":"))
+		dirs = append(dirs, filepath.Join(root, filepath.FromSlash(d)))
 	}
-
-	for k, v := range meta.Env {
-		env = append(env, k+"="+strings.ReplaceAll(v, "${ROOT}", root))
+	env := map[string]string{}
+	order := []string{}
+	for _, kv := range os.Environ() {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		env[k] = v
+		order = append(order, k)
 	}
-	env = append(env, "TMPDIR="+defaultTmp())
-
-	argv := append([]string{path}, args...)
-	return syscall.Exec(path, argv, env)
+	if len(dirs) > 0 {
+		old := env["PATH"]
+		env["PATH"] = strings.Join(dirs, sep)
+		if old != "" {
+			env["PATH"] += sep + old
+		}
+	}
+	for k, v := range p.Env {
+		env[k] = expand(v, root)
+		if _, ok := env[k]; !ok {
+			order = append(order, k)
+		}
+	}
+	out := make([]string, 0, len(order))
+	seen := map[string]bool{}
+	for _, k := range order {
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k+"="+env[k])
+	}
+	for k, v := range env {
+		if !seen[k] {
+			out = append(out, k+"="+v)
+		}
+	}
+	return out
 }
 
-func defaultTmp() string {
-	if v := os.Getenv("TMPDIR"); v != "" {
-		return v
-	}
-	return "/tmp"
+func expand(v, root string) string {
+	v = strings.ReplaceAll(v, "${ROOT}", root)
+	v = strings.ReplaceAll(v, "${LAYERS}", filepath.Join(cacheRoot(), "l"))
+	v = strings.ReplaceAll(v, "${CACHE}", cacheRoot())
+	v = strings.ReplaceAll(v, "$ROOT", root)
+	return v
 }
 
-// inspect answers the --sb-* introspection flags without extracting anything
-// except when explicitly asked to.
+// inspect prints metadata; it must work on a foreign-arch bundle too, so it
+// never materialises anything unless --sb-extract-dir asks for it.
 func inspect(self string, args []string) error {
-	tr, err := readTrailer(self)
+	b, err := openBundle(self)
 	if err != nil {
 		return err
 	}
 	switch args[0] {
 	case "--sb-version":
-		fmt.Printf("staticbuild stub 1 · bundle v%d · %s/%s · payload %d bytes · sha256:%s\n",
-			tr.Version, runtime.GOOS, runtime.GOARCH, tr.Size, hex.EncodeToString(tr.Sum[:]))
+		fmt.Printf("stub %s  %s/%s\nbundle %s %s  index %s\n",
+			stubVersion, runtime.GOOS, runtime.GOARCH,
+			b.Index.Tool, b.Index.Version, hex.EncodeToString(b.Trailer.Sum[:12]))
+		if b.legacy {
+			fmt.Println("payload format SBX1 (legacy, single payload)")
+		}
 		return nil
-	case "--sb-self":
-		fmt.Println(self)
+
+	case "--sb-payloads":
+		for _, p := range b.Index.Payloads {
+			fmt.Printf("%-16s %-8s %-8s %-8s %s\n", p.ID, p.OS, p.Arch, p.Tier, p.Entry)
+		}
 		return nil
-	case "--sb-print-meta", "--sb-print-layers":
-		f, err := os.Open(self)
+
+	case "--sb-cache":
+		fmt.Println(cacheRoot())
+		return nil
+
+	case "--sb-clean":
+		return os.RemoveAll(cacheRoot())
+
+	case "--sb-list":
+		p, err := b.resolvePayload(os.Getenv("SB_PAYLOAD"))
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		meta, _, err := extract(io.NewSectionReader(f, int64(tr.Offset), int64(tr.Size)),
-			"", tr, onlyMeta())
+		fmt.Printf("%s %s\n  %s\t%s (default)\n", b.Index.Tool, b.Index.Version, p.Entry,
+			filepath.Base(p.Entry))
+		names := make([]string, 0, len(p.Aliases))
+		for k := range p.Aliases {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		for _, k := range names {
+			fmt.Printf("  %s\t%s\n", k, p.Aliases[k])
+		}
+		return nil
+
+	case "--sb-print-index":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(b.Index)
+
+	case "--sb-print-meta":
+		p, err := b.resolvePayload(os.Getenv("SB_PAYLOAD"))
 		if err != nil {
 			return err
 		}
-		b, _ := json.MarshalIndent(meta, "", "  ")
-		fmt.Println(string(b))
-		return nil
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(p)
+
 	case "--sb-extract-dir":
 		if len(args) < 2 {
-			return errors.New("usage: --sb-extract-dir DIR")
+			return fmt.Errorf("--sb-extract-dir needs a directory")
 		}
-		dir, err := filepath.Abs(args[1])
+		p, err := b.resolvePayload(os.Getenv("SB_PAYLOAD"))
 		if err != nil {
 			return err
 		}
-		if _, err := os.Stat(dir); err == nil {
-			return fmt.Errorf("%s already exists", dir)
-		}
-		meta, root, err := materialize(self, tr, &dir)
+		root, err := b.materialize(p, args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("extracted %s %s to %s (entry %s)\n", meta.Tool, meta.Version, root, meta.Entry)
+		fmt.Println(root)
 		return nil
-	case "--sb-clean":
-		if err := os.RemoveAll(cacheDir()); err != nil {
-			return err
+
+	case "--sb-payload":
+		if len(args) < 2 {
+			return fmt.Errorf("--sb-payload needs an id (see --sb-payloads)")
 		}
-		fmt.Println("cleared", cacheDir())
+		os.Setenv("SB_PAYLOAD", args[1])
+		// Re-enter without the flag so the normal run path handles it.
+		os.Args = append([]string{os.Args[0]}, args[2:]...)
+		main()
 		return nil
-	default:
-		return fmt.Errorf("unknown introspection flag %q\n"+
-			"  --sb-version  --sb-self  --sb-print-meta  --sb-print-layers\n"+
-			"  --sb-extract-dir DIR  --sb-clean", args[0])
 	}
+	return fmt.Errorf("unknown flag %q", args[0])
 }
 
-// acquire takes an advisory lock file, waiting for a concurrent extractor.
-func acquire(path string) error {
-	deadline := time.Now().Add(15 * time.Minute)
-	for {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			fmt.Fprintf(f, "%d", os.Getpid())
-			f.Close()
-			return nil
-		}
-		if !os.IsExist(err) {
-			return err
-		}
-		if fi, statErr := os.Stat(path); statErr == nil && time.Since(fi.ModTime()) > 15*time.Minute {
-			os.Remove(path) // stale: the previous extractor died
-			continue
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for %s", path)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func release(path string) { os.Remove(path) }
-
-func writeOK(dir string) {
-	if f, err := os.Create(filepath.Join(dir, ".sb-ok")); err == nil {
-		fmt.Fprintf(f, "%d\n", time.Now().Unix())
-		f.Close()
-	}
-}
-
-func fatal(err error) {
-	fmt.Fprintf(os.Stderr, "sb: %v\n", err)
-	os.Exit(127)
-}
+func fatal(err error) { fatalf("%v", err) }
 
 func fatalf(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "sb: "+format+"\n", a...)
-	os.Exit(127)
+	fmt.Fprintf(os.Stderr, format+"\n", a...)
+	os.Exit(1)
 }

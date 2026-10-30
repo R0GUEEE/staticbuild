@@ -15,7 +15,7 @@ JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)
 
 if command -v apk >/dev/null 2>&1; then
   apk add --no-cache \
-    build-base clang lld cmake ninja python3 py3-pip curl git zstd xz go file \
+    build-base clang lld cmake ninja python3 py3-pip curl git zstd xz go file bash \
     binutils tar gzip bzip2 perl pkgconf make autoconf automake libtool patch \
     zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
     gettext-dev gettext-static libffi-dev libxml2-dev sqlite-dev ncurses-dev \

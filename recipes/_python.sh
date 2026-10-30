@@ -40,6 +40,16 @@ sb_build_python() {
         die "python configure failed"
       }
 
+  # `*static*` in Setup.local only sets the default for modules that file
+  # defines. The generated Modules/Setup.stdlib carries an explicit *shared*
+  # marker per module, and that marker wins — which is why the first attempt
+  # still produced lib-dynload/*.so and then failed to link them with -static.
+  # Rewriting the generated file is what actually links the modules in.
+  for _f in Modules/Setup.stdlib Modules/Setup; do
+    [ -f "$_f" ] && sed -i 's/^\*shared\*/*static*/' "$_f" || true
+  done
+  log "extension modules: $(grep -c '^\*static\*' Modules/Setup.stdlib 2>/dev/null || echo 0) static groups"
+
   make -j "$SB_JOBS" > "$SB_WORK/python-make.log" 2>&1 || {
     tail -60 "$SB_WORK/python-make.log" >&2
     die "python build failed"

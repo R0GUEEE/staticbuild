@@ -630,10 +630,10 @@
     {
       "id": "dpkg",
       "name": "dpkg tooling",
-      "version": "1.22.11",
+      "version": "1.22.22",
       "license": "GPL-2.0-or-later",
       "method": "source",
-      "upstream": "https://git.dpkg.org/git/dpkg/dpkg.git",
+      "upstream": "https://deb.debian.org/debian/pool/main/d/dpkg/",
       "provides": [
         "dpkg-deb",
         "dpkg-split",

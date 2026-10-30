@@ -1,144 +1,118 @@
 #!/usr/bin/env python3
-"""Pack a staged tree into a single self-extracting bundle.
+"""Pack one or more staged trees into a single SBX2 bundle.
 
-    pack.py --stub build/sb-stub --root stage/clang --out dist/clang-20.1.8-linux-arm64 \
-            [--level 19] [--flags layered]
+    pack.py --stub build/sb-stub-linux-arm64 --out dist/ninja-1.12.1-linux-arm64 \
+            --payload linux-arm64=build/stage/ninja-linux-arm64
 
-Format (little endian):
+    pack.py --stub build/sb-stub-macos-universal --out dist/clang-20.1.8-macos-universal \
+            --payload macos-arm64=build/stage/clang-macos-arm64 \
+            --payload macos-x86_64=build/stage/clang-macos-x86_64
 
-    [ stub Mach-O/ELF ][ zstd(tar payload) ][ 64-byte trailer ]
+Each payload root carries its own `.sb/meta.json` (written by `sb_meta` in
+recipes/_common.sh): entry, PATH additions, env, aliases and layer hashes. The
+target name supplies os/arch, looked up in manifest/tools.json so the target
+table stays single-sourced.
 
-Trailer: magic "SBX1", u16 version, u16 flags, u64 payload offset,
-u64 payload size, sha256[32] of the compressed payload, u64 epoch.
-
-The tar payload is deterministic: entries sorted, uid/gid 0, uname/gname empty,
-mtime pinned to SOURCE_DATE_EPOCH, mode normalised. Two builds of the same tree
-with the same epoch produce byte-identical bundles, which is what makes the
-sha256 in SHA256SUMS meaningful.
+Determinism: entries sorted, mode normalised, mtime pinned, blobs emitted in
+digest order, index serialised with sorted keys. Same inputs + same
+SOURCE_DATE_EPOCH = byte-identical bundle.
 """
+from __future__ import annotations
+
 import argparse
-import hashlib
-import io
 import json
 import os
-import struct
-import subprocess
 import sys
-import tarfile
-import tempfile
 
-MAGIC = b"SBX1"
-VERSION = 1
-FLAG_LAYERED = 1 << 0
-FLAG_SEALED = 1 << 1
-TRAILER = struct.Struct("<4sHHQQ32sQ")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sbx  # noqa: E402
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def epoch() -> int:
-    v = os.environ.get("SOURCE_DATE_EPOCH")
-    if v and v.isdigit():
-        return int(v)
-    return 1700000000
+def load_targets(manifest_path: str) -> dict:
+    try:
+        with open(manifest_path) as fh:
+            return json.load(fh).get("targets", {})
+    except OSError:
+        return {}
 
 
-def walk(root):
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames.sort()
-        rel = os.path.relpath(dirpath, root)
-        if rel != ".":
-            yield dirpath, rel
-        for name in sorted(filenames):
-            yield os.path.join(dirpath, name), os.path.join(rel, name) if rel != "." else name
+def payload_from(target: str, root: str, targets: dict, args) -> dict:
+    meta_path = os.path.join(root, ".sb", "meta.json")
+    if not os.path.isfile(meta_path):
+        sys.exit(f"pack: {root} has no .sb/meta.json (run sb_meta or pass a staged tree)")
+    with open(meta_path) as fh:
+        meta = json.load(fh)
+    spec = targets.get(target, {})
+    os_name = spec.get("os") or meta.get("os") or target.split("-")[0]
+    arch = spec.get("arch") or meta.get("arch") or (target.split("-")[1] if "-" in target else "unknown")
+    return {
+        "id": target,
+        "os": os_name,
+        "arch": arch,
+        "family": spec.get("family") or meta.get("family") or "elf",
+        "tier": meta.get("tier") or args.tier or "sfx",
+        "entry": meta.get("entry") or args.entry,
+        "paths": meta.get("paths") or ["bin"],
+        "env": meta.get("env") or {},
+        "aliases": meta.get("aliases") or {},
+        "layers": meta.get("layers") or [],
+        "root": root,
+    }
 
 
-def add_entry(tar, full, rel, mtime):
-    st = os.lstat(full)
-    ti = tarfile.TarInfo(rel.replace(os.sep, "/"))
-    ti.uid = ti.gid = 0
-    ti.uname = ti.gname = ""
-    ti.mtime = mtime
-    if os.path.islink(full):
-        ti.type = tarfile.SYMTYPE
-        ti.linkname = os.readlink(full)
-        ti.mode = 0o777
-        tar.addfile(ti)
-        return
-    if os.path.isdir(full):
-        ti.type = tarfile.DIRTYPE
-        ti.mode = 0o755
-        tar.addfile(ti)
-        return
-    if not os.path.isfile(full):
-        return
-    ti.type = tarfile.REGTYPE
-    ti.mode = 0o755 if st.st_mode & 0o111 else 0o644
-    with open(full, "rb") as fh:
-        data = fh.read()
-    ti.size = len(data)
-    tar.addfile(ti, io.BytesIO(data))
-
-
-def build_tar(root, out_path, mtime):
-    with tarfile.open(out_path, "w", format=tarfile.USTAR_FORMAT) as tar:
-        for full, rel in walk(root):
-            add_entry(tar, full, rel, mtime)
-
-
-def make_payload(root, workdir, level):
-    tar_path = os.path.join(workdir, "payload.tar")
-    build_tar(root, tar_path, epoch())
-    zst_path = os.path.join(workdir, "payload.tar.zst")
-    cmd = ["zstd", "-q", "-f", f"-{level}", "-T0", "--no-progress", tar_path, "-o", zst_path]
-    subprocess.run(cmd, check=True)
-    return zst_path
-
-
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stub", required=True)
-    ap.add_argument("--root", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--level", type=int, default=int(os.environ.get("SB_ZSTD_LEVEL", 19)))
-    ap.add_argument("--layered", action="store_true")
+    ap.add_argument("--payload", action="append", default=[], metavar="TARGET=DIR")
+    ap.add_argument("--root", help="legacy single-payload form (target from --target)")
+    ap.add_argument("--target", default=os.environ.get("SB_TARGET", ""))
+    ap.add_argument("--manifest", default=os.path.join(ROOT, "manifest", "tools.json"))
+    ap.add_argument("--tool")
+    ap.add_argument("--version", default="0.0.0")
+    ap.add_argument("--entry", default="bin/tool")
+    ap.add_argument("--tier", default="sfx")
+    ap.add_argument("--level", type=int, default=19)
+    ap.add_argument("--epoch", type=int,
+                    default=int(os.environ.get("SOURCE_DATE_EPOCH") or 1700000000))
+    ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
-    meta_path = os.path.join(args.root, ".sb", "meta.json")
-    if not os.path.isfile(meta_path):
-        sys.exit(f"pack: {args.root} has no .sb/meta.json (recipe must call sb_meta)")
-    meta = json.load(open(meta_path))
-    for key in ("tool", "version", "entry"):
-        if not meta.get(key):
-            sys.exit(f"pack: .sb/meta.json is missing {key}")
-    if not os.path.isfile(os.path.join(args.root, meta["entry"])):
-        sys.exit(f"pack: entrypoint {meta['entry']} does not exist in {args.root}")
+    targets = load_targets(args.manifest)
+    specs = []
+    for item in args.payload:
+        target, _, root = item.partition("=")
+        if not root:
+            sys.exit(f"pack: --payload wants TARGET=DIR, got {item!r}")
+        specs.append(payload_from(target, root, targets, args))
+    if args.root:
+        target = args.target or "linux-arm64"
+        specs.append(payload_from(target, args.root, targets, args))
+    if not specs:
+        sys.exit("pack: nothing to pack (use --payload TARGET=DIR)")
 
-    flags = FLAG_SEALED | (FLAG_LAYERED if args.layered else 0)
-    stub_size = os.path.getsize(args.stub)
+    with open(args.stub, "rb") as fh:
+        stub = fh.read()
+    if not stub:
+        sys.exit(f"pack: stub {args.stub} is empty")
+    if stub[:4] not in (b"\x7fELF", b"cffa", b"\xca\xfe", b"MZ"):
+        sys.exit(f"pack: {args.stub} is not an ELF/Mach-O/PE executable")
 
-    with tempfile.TemporaryDirectory() as work:
-        payload = make_payload(args.root, work, args.level)
-        size = os.path.getsize(payload)
-        h = hashlib.sha256()
-        os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
-        tmp_out = args.out + ".tmp"
-        with open(tmp_out, "wb") as out, open(args.stub, "rb") as stub, open(payload, "rb") as src:
-            out.write(stub.read())
-            while True:
-                chunk = src.read(1 << 20)
-                if not chunk:
-                    break
-                h.update(chunk)
-                out.write(chunk)
-            out.write(TRAILER.pack(MAGIC, VERSION, flags, stub_size, size, h.digest(), epoch()))
+    tool = args.tool or specs[0]["entry"].rsplit("/", 1)[-1]
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    try:
+        info = sbx.write_bundle(args.out, stub, specs, tool, args.version,
+                                epoch=args.epoch, level=args.level)
+    except sbx.ZstdError as exc:
+        sys.exit(f"pack: {exc}")
 
-    os.chmod(tmp_out, 0o755)
-    os.replace(tmp_out, args.out)
-    total = os.path.getsize(args.out)
-    print(f"packed {meta['tool']} {meta['version']} -> {args.out}")
-    print(f"  stub   {stub_size:>12,} B")
-    print(f"  payload{size:>12,} B  sha256:{h.hexdigest()[:16]}…")
-    print(f"  total  {total:>12,} B  ({total / 1048576:.1f} MiB)")
+    info["out"] = args.out
+    if not args.quiet:
+        print(json.dumps(info))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
