@@ -94,7 +94,7 @@ jobs:
             -e SB_SKIP_VERIFY=0 \
             "${{ matrix.image }}" /bin/sh -c '
               set -eu
-              apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz \
+              apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz go file binutils \
                 tar gzip bzip2 perl pkgconf make autoconf automake libtool \
                 zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
                 gettext-dev libffi-dev libxml2-dev

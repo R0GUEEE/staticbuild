@@ -47,6 +47,7 @@ stub:
 	cd stub && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o $(ROOT)/build/sb-stub .
 
 # Install the build dependencies a recipe declares in its header.
+# Every recipe also needs: python3 (pack.py), zstd (payload), go (SFX stub).
 deps:
 	@for r in $(or $(TOOL),$(TOOLS)); do \
 	  d=$$(sed -n 's/^# deps: //p' recipes/$$r.sh 2>/dev/null); \
