@@ -9,7 +9,7 @@ sb_git https://salsa.debian.org/cli/fakeroot.git "upstream/$SB_VERSION" fakeroot
 sb_cd "$SB_WORK/src/fakeroot"
 
 ./bootstrap 2>/dev/null || autoreconf -fi
-./configure --prefix=/usr --disable-static \
+sb_configure --prefix=/usr --disable-static \
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s"
 make -j "$SB_JOBS"
 

@@ -12,12 +12,12 @@ _DEFS="-DREDIS_STORAGE_BACKEND=OFF -DENABLE_DOCS=OFF -DENABLE_TESTING=OFF -DDEPS
 
 case "$SB_FAMILY" in
   elf)
-    cmake -B out -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
+    cmake -B out $(sb_cmake_args) -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
       -DZSTD_FROM_INTERNET=ON \
       -DCMAKE_CXX_FLAGS="$(sb_cflags)" -DCMAKE_EXE_LINKER_FLAGS="-static -s"
     ;;
   macho)
-    cmake -B out -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
+    cmake -B out $(sb_cmake_args) -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
       -DZSTD_FROM_INTERNET=ON \
       -DCMAKE_OSX_ARCHITECTURES="$SB_ARCH" -DCMAKE_OSX_SYSROOT="${SB_SDK:-iphoneos}"
     ;;

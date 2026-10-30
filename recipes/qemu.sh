@@ -9,7 +9,7 @@ src=$(sb_fetch "https://download.qemu.org/qemu-$SB_VERSION.tar.xz")
 sb_unpack "$src" "$SB_WORK/src/qemu"
 sb_cd "$SB_WORK/src/qemu/qemu-$SB_VERSION"
 
-./configure --static --prefix=/usr \
+sb_configure --static --prefix=/usr \
   --target-list="aarch64-linux-user arm-linux-user i386-linux-user x86_64-linux-user riscv64-linux-user" \
   --disable-system --disable-docs --disable-tools --disable-guest-agent \
   --disable-capstone --disable-vnc --disable-gtk --disable-sdl --disable-opengl \

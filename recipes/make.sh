@@ -10,11 +10,11 @@ sb_cd "$SB_WORK/src/make/make-$SB_VERSION"
 
 case "$SB_FAMILY" in
   elf)
-    ./configure --disable-nls --without-guile --prefix=/usr \
+    sb_configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
     ;;
   macho)
-    ./configure --disable-nls --without-guile --prefix=/usr \
+    sb_configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_cflags) -Wl,-dead_strip"
     ;;
 esac

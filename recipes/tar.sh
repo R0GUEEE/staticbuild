@@ -8,7 +8,7 @@ src=$(sb_fetch "https://github.com/libarchive/libarchive/releases/download/v$SB_
 sb_unpack "$src" "$SB_WORK/src/libarchive"
 sb_cd "$SB_WORK/src/libarchive/libarchive-$SB_VERSION"
 
-cmake -B out -G "Unix Makefiles" \
+cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DENABLE_TEST=OFF -DENABLE_TAR=ON -DENABLE_CPIO=ON -DENABLE_CAT=OFF \

@@ -26,7 +26,7 @@ if [ ! -f "$_plist/lib/libplist-2.0.a" ]; then
   sb_cd "$_root"
 
   if [ -f configure ]; then
-    ./configure --prefix="$_plist" --enable-static --disable-shared \
+    sb_configure --prefix="$_plist" --enable-static --disable-shared \
       --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
   else
     ./autogen.sh --prefix="$_plist" --enable-static --disable-shared \

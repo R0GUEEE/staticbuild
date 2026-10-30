@@ -140,6 +140,25 @@ check_macho() {
     arm64*) ok "arch $_arch" ;;
     *) bad "unexpected arch '$_arch'" ;;
   esac
+
+  # Platform and deployment target are the two facts that decide whether the
+  # binary loads on a phone at all, and neither is visible from the arch: a
+  # macos-arm64 binary and an ios-arm64 binary are both thin arm64 Mach-O.
+  # LC_BUILD_VERSION platform: 1 = macOS, 2 = iOS, 7 = iOS simulator.
+  _want=${SB_EXPECT_PLATFORM:-}
+  _plat=$(otool -l "$_bin" | awk '/LC_BUILD_VERSION/{f=1} f && $1=="platform" {print $2; exit}')
+  if [ -z "$_plat" ]; then
+    _plat=$(otool -l "$_bin" | awk '/LC_VERSION_MIN_IPHONEOS/{print 2; exit}')
+  fi
+  case "$_want:$_plat" in
+    2:2) ok "platform iOS" ;;
+    7:7) ok "platform iOS simulator" ;;
+    1:1) ok "platform macOS" ;;
+    :)   warn "no LC_BUILD_VERSION in $(basename "$_bin")" ;;
+    *)   bad "platform $_plat, expected $_want for this target" ;;
+  esac
+  _minos=$(otool -l "$_bin" | awk '/LC_BUILD_VERSION/{f=1} f && $1=="minos" {print $2; exit}')
+  [ -n "$_minos" ] && log "deployment target $_minos"
 }
 
 check_leaks() {
@@ -178,6 +197,13 @@ SBLOOKUP
   _mb=$(echo "$_budget" | head -1 | cut -f2)
   _smoke=$(echo "$_budget" | head -1 | cut -f3)
   _tgt=$(echo "$_budget" | head -1 | cut -f4)
+  case "$_tgt" in
+    ios-arm64)     SB_EXPECT_PLATFORM=2 ;;
+    ios-arm64-sim) SB_EXPECT_PLATFORM=7 ;;
+    macos-*)       SB_EXPECT_PLATFORM=1 ;;
+    *)             SB_EXPECT_PLATFORM= ;;
+  esac
+  export SB_EXPECT_PLATFORM
   _tier=$(echo "$_budget" | head -1 | cut -f5)
 
   # A bundle's first four bytes are the ELF/Mach-O magic of its stub, so the
@@ -240,6 +266,16 @@ SBLOOKUP
       bad "size ${_actual} B over ${_mb} MiB budget"
     fi
   fi
+
+  case "${_tgt:-}" in
+    ios-*)
+      # Executing an iOS Mach-O on the macOS build host is impossible (dyld
+      # refuses the platform); pretending a smoke test ran would be a lie, so
+      # the check is static and says so.
+      ok "smoke: not executed (ios target; verified statically above)"
+      _smoke=""
+      ;;
+  esac
 
   if [ -n "${_smoke:-}" ]; then
     _exec=${_bin:-$_artifact}

@@ -11,7 +11,7 @@ src=$(sb_fetch "https://deb.debian.org/debian/pool/main/d/dpkg/dpkg_${SB_VERSION
 sb_unpack "$src" "$SB_WORK/src/dpkg"
 sb_cd "$SB_WORK/src/dpkg/dpkg-$SB_VERSION"
 
-./configure --prefix=/usr --disable-shared --enable-static \
+sb_configure --prefix=/usr --disable-shared --enable-static \
   --disable-dselect --disable-start-stop-daemon \
   --disable-update-alternatives --without-libselinux --disable-nls \
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static -s)"

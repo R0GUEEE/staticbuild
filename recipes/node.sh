@@ -33,7 +33,7 @@ else
       https://github.com/JaneaSystems/nodejs-mobile.git "$SB_WORK/src/nodejs-mobile"
 
   sb_cd "$SB_WORK/src/nodejs-mobile"
-  ./configure --without-snapshot --with-intl=none --without-ssl \
+  sb_configure --without-snapshot --with-intl=none --without-ssl \
     --openssl-no-asm --dest-os=ios --dest-cpu=arm64 \
     --v8-options="-DV8_ENABLE_WEBASSEMBLY=0 -DV8_TARGET_ARCH_ARM64=1 -D__arm64__"
   make -j "$SB_JOBS" LDFLAGS="-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
