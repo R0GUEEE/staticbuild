@@ -135,6 +135,21 @@ def check_entry(rep, spec, tree, entry, tier, do_smoke, smoke_cmd):
         rep.bad("%s/%s: entry is %s, expected %s" % (spec.get("os"), spec.get("arch"), got, family))
         return
     rep.ok("%s/%s → %s %s" % (spec.get("os"), spec.get("arch"), got, info.get("arch", "")))
+    if family == "macho":
+        # Shape alone cannot tell an iOS binary from a macOS one: both are thin
+        # arm64 Mach-O. The platform field is the only thing that decides
+        # whether dyld will load it on a phone, and a recipe that quietly falls
+        # back to a host build produces a perfectly valid binary with the wrong
+        # platform in it.
+        want = {"ios": "ios", "macos": "macos"}.get(spec.get("os"))
+        have = info.get("platform")
+        if have is None:
+            rep.warn("no LC_BUILD_VERSION: platform unknown")
+        elif want and have != want:
+            rep.bad("platform is %s, expected %s (this binary will not load on the target)"
+                    % (have, want))
+        else:
+            rep.ok("platform %s, deployment target %s" % (have, info.get("minos")))
     missing = non_system(info.get("needed", []), family)
     if tier in ("static", "macho"):
         if missing:

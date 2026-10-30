@@ -249,7 +249,7 @@ TOOLS.append(tool(
     }, "bin/swift"))
 
 TOOLS.append(tool(
-    "theos", "Theos + Logos", "2024.11", "GPL-3.0-or-later", "source",
+    "theos", "Theos + Logos", "2.5", "GPL-3.0-or-later", "source",
     "https://github.com/theos/theos",
     ["theos", "logos.pl", "logify.pl", "nic.pl", "dm.pl"],
     {

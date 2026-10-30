@@ -402,16 +402,33 @@ sb_finish() {
 # version and falling back to the default branch with a warning. Projects rename
 # tags constantly (ldid ships 2.1.5-procursus7, not 2.1.5), and a hard failure
 # there is a build outage for no good reason.
-sb_git() {  # sb_git URL TAG DEST [--recurse]
-  _url=$1; _tag=$2; _dest=$SB_WORK/src/$3; _sub=""
+sb_git() {  # sb_git URL REF DEST [--recurse]
+  # REF is a tag, a branch, or a full 40-char commit. A commit cannot be cloned
+  # with --branch (that only accepts refs/heads and refs/tags), which is how a
+  # pinned sha used to fall through to "building the default branch" and ship
+  # whatever HEAD happened to be that morning.
+  _url=$1; _ref=$2; _dest=$SB_WORK/src/$3; _sub=""
   [ "${4:-}" = --recurse ] && _sub="--recurse-submodules --shallow-submodules"
   rm -rf "$_dest"
   mkdir -p "$SB_WORK/src"
-  log "git clone $3 @ $_tag"
-  if git clone --depth 1 --branch "$_tag" $_sub "$_url" "$_dest" 2>/dev/null; then
+  log "git clone $3 @ $_ref"
+  case "$_ref" in
+    *[!0-9a-f]*) ;;                      # not a bare hex string: an ordinary ref
+    *)
+      if [ ${#_ref} -eq 40 ]; then
+        if git init -q "$_dest" &&
+           git -C "$_dest" remote add origin "$_url" &&
+           git -C "$_dest" fetch -q --depth 1 $_sub origin "$_ref" &&
+           git -C "$_dest" checkout -q FETCH_HEAD; then
+          return 0
+        fi
+        die "sb_git: cannot fetch commit $_ref from $_url"
+      fi ;;
+  esac
+  if git clone --depth 1 --branch "$_ref" $_sub "$_url" "$_dest" 2>/dev/null; then
     return 0
   fi
-  warn "tag $_tag not found in $_url; building the default branch"
+  warn "ref $_ref not found in $_url; building the default branch"
   rm -rf "$_dest"
   git clone --depth 1 $_sub "$_url" "$_dest"
 }

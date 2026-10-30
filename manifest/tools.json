@@ -3585,7 +3585,7 @@
   {
    "id": "theos",
    "name": "Theos + Logos",
-   "version": "2024.11",
+   "version": "2.5",
    "license": "GPL-3.0-or-later",
    "method": "source",
    "upstream": "https://github.com/theos/theos",

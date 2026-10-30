@@ -25,6 +25,10 @@ jobs:
           PY
       - name: targets referenced by the manifest exist
         run: python3 scripts/matrix.py --check
+      - name: binary reader self-test
+        # checkbin.py decides whether an artifact is static and whether it is
+        # really an iOS binary; a parse bug there ships the wrong platform.
+        run: python3 scripts/selftest.py
       - name: make can actually reach a recipe
         # caught a real bug: marking tools/* .PHONY makes GNU make skip implicit
         # rule search, so every build printed "Nothing to be done"

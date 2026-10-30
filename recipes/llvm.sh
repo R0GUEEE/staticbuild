@@ -52,11 +52,17 @@ case "$SB_FAMILY" in
       -DLLVM_STATIC_LINK_CXX_STDLIB=ON || die "llvm: configure failed"
     ;;
   macho)
-    _sdk=$(xcrun --sdk "${SB_SDK:-iphoneos}" --show-sdk-path)
+    _sdk=$(sb_ios_sdk)
+    # CMAKE_SYSTEM_NAME=iOS (from the toolchain file) is what makes cmake treat
+    # this as a cross build; without it every try_run() executes an iPhoneOS
+    # binary on the Mac and configures fails.
     cmake -S "$_src/llvm" -B "$SB_WORK/llvm-out" $_common \
+      -DCMAKE_TOOLCHAIN_FILE="$(sb_cmake_toolchain)" \
       -DCMAKE_OSX_ARCHITECTURES="$SB_ARCH" \
       -DCMAKE_OSX_SYSROOT="$_sdk" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET="${SB_MIN_OS:-15.0}" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="${SB_DEPLOY_MIN:-15.0}" \
+      -DLLVM_HOST_TRIPLE="$SB_TRIPLE" \
+      -DLLVM_DEFAULT_TARGET_TRIPLE="$SB_TRIPLE" \
       -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
       -DRUNTIMES_CMAKE_ARGS="-DCMAKE_OSX_SYSROOT=$_sdk;-DCMAKE_OSX_ARCHITECTURES=$SB_ARCH;-DLIBCXX_ENABLE_SHARED=OFF;-DLIBCXXABI_ENABLE_SHARED=OFF;-DLIBUNWIND_ENABLE_SHARED=OFF" \
       -DLLVM_ENABLE_LIBCXX=ON || die "llvm: configure failed"
