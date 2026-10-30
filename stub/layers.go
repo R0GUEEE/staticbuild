@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/tar"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
