@@ -14,6 +14,7 @@ case "$SB_FAMILY" in
   elf)
     ./bootstrap --parallel="$SB_JOBS" --prefix=/usr \
       -- -DCMAKE_USE_OPENSSL=OFF -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF \
+         # shellcheck disable=SC2046 # word splitting is the point
          -DCMAKE_C_FLAGS="$(sb_cflags)" -DCMAKE_CXX_FLAGS="$(sb_cflags)" \
          -DCMAKE_EXE_LINKER_FLAGS="-static"
     ;;

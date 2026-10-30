@@ -22,10 +22,12 @@ case "$SB_FAMILY" in
     ;;
   elf)
     sb_configure --disable-nls --without-guile --prefix=/usr \
+      # shellcheck disable=SC2046 # word splitting is the point
       CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
     ;;
   macho)
     sb_configure --disable-nls --without-guile --prefix=/usr \
+      # shellcheck disable=SC2046 # word splitting is the point
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_cflags) -Wl,-dead_strip"
     ;;
 esac

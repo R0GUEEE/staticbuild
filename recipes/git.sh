@@ -16,6 +16,7 @@ make -j "$SB_JOBS" \
   NO_GETTEXT=YesPlease NO_TCLTK=YesPlease NO_PERL=YesPlease NO_PYTHON=YesPlease \
   NO_INSTALL_HARDLINKS=YesPlease NO_OPENSSL=YesPlease \
   USE_LIBPCRE2=NoThanks NO_REGEX=NeedsStartEnd \
+  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="$_ld" \
   all
 

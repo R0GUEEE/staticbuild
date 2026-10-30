@@ -14,6 +14,7 @@ cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DENABLE_TEST=OFF -DENABLE_TAR=ON -DENABLE_CPIO=ON -DENABLE_CAT=OFF \
   -DENABLE_OPENSSL=ON -DENABLE_ZLIB=ON -DENABLE_BZip2=ON -DENABLE_LZMA=ON -DENABLE_ZSTD=ON \
+  # shellcheck disable=SC2046 # word splitting is the point
   -DCMAKE_C_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
 cmake --build out -j "$SB_JOBS"

@@ -10,6 +10,7 @@ sb_cd "$SB_WORK/src/fakeroot"
 
 ./bootstrap 2>/dev/null || autoreconf -fi
 sb_configure --prefix=/usr --disable-static \
+  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s"
 make -j "$SB_JOBS"
 

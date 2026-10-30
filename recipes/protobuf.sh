@@ -18,6 +18,7 @@ cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -Dprotobuf_BUILD_CONFORMANCE=OFF \
   -Dprotobuf_BUILD_EXAMPLES=OFF \
   -Dprotobuf_ABSL_PROVIDER=module \
+  # shellcheck disable=SC2046 # word splitting is the point
   -DCMAKE_CXX_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s" \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON

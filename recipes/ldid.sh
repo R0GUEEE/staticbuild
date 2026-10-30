@@ -27,9 +27,11 @@ if [ ! -f "$_plist/lib/libplist-2.0.a" ]; then
 
   if [ -f configure ]; then
     sb_configure --prefix="$_plist" --enable-static --disable-shared \
+      # shellcheck disable=SC2046 # word splitting is the point
       --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
   else
     ./autogen.sh --prefix="$_plist" --enable-static --disable-shared \
+      # shellcheck disable=SC2046 # word splitting is the point
       --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
   fi
   make -j "$SB_JOBS"
@@ -62,6 +64,7 @@ sb_git https://github.com/ProcursusTeam/ldid.git "$SB_VERSION" ldid
 sb_cd "$SB_WORK/src/ldid"
 
 make -j "$SB_JOBS" VERSION="$SB_VERSION" \
+  # shellcheck disable=SC2046 # word splitting is the point
   CXXFLAGS="$(sb_cflags) -I$_plist/include -std=c++17 -DHAVE_OPENSSL" \
   LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s" \
   LIBPLIST_INCLUDES="-I$_plist/include" \

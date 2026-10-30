@@ -9,6 +9,7 @@ sb_git https://github.com/termux/proot.git "v$SB_VERSION" proot
 sb_cd "$SB_WORK/src/proot/src"
 
 make -j "$SB_JOBS" CC="${CC:-cc}" \
+  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags) $([ "$SB_FAMILY" = elf ] && echo -static) -DPROOT_VERSION=\\\"$SB_VERSION\\\"" \
   LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s"
 

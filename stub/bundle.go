@@ -40,7 +40,9 @@ func (b *Bundle) materialize(p *Payload, dest string) (string, error) {
 	if b.legacy {
 		return b.extractLegacy(dest)
 	}
-	verifyIndexDigest(b)
+	if !verifyIndexDigest(b) {
+		return "", fmt.Errorf("%s: index digest mismatch (corrupt or truncated bundle)", filepath.Base(b.Path))
+	}
 
 	if dest != "" {
 		if err := b.writeTree(p, dest, true); err != nil {
@@ -172,6 +174,12 @@ func (b *Bundle) writeTree(p *Payload, root string, inline bool) error {
 			}
 			if uint64(len(data)) != blob.USize {
 				return fmt.Errorf("blob %s: %d bytes, expected %d", ent.Ref, len(data), blob.USize)
+			}
+			// The blob key is the first 32 hex chars of its sha256: this is the
+			// check that turns a flipped byte anywhere in the file into a clear
+			// failure instead of a mysteriously broken tool.
+			if sum := sha256.Sum256(data); hex.EncodeToString(sum[:])[:len(ent.Ref)] != ent.Ref {
+				return fmt.Errorf("blob %s (%s): content digest mismatch", ent.Ref, ent.Path)
 			}
 			out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(ent.Mode&0o777))
 			if err != nil {

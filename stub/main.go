@@ -233,9 +233,17 @@ func inspect(self string, args []string) error {
 		if err != nil {
 			return err
 		}
+		// tool/version live on the index, everything else on the payload; a
+		// caller asking for "the metadata" wants both in one object.
+		out := map[string]any{
+			"tool": b.Index.Tool, "version": b.Index.Version,
+			"id": p.ID, "os": p.OS, "arch": p.Arch, "family": p.Family,
+			"tier": p.Tier, "entry": p.Entry, "paths": p.Paths, "env": p.Env,
+			"aliases": p.Aliases, "layers": p.Layers,
+		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(p)
+		return enc.Encode(out)
 
 	case "--sb-extract-dir":
 		if len(args) < 2 {

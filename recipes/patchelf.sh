@@ -10,6 +10,7 @@ sb_unpack "$src" "$SB_WORK/src/patchelf"
 sb_cd "$SB_WORK/src/patchelf/patchelf-$SB_VERSION"
 
 ./bootstrap.sh 2>/dev/null || autoreconf -fi
+# shellcheck disable=SC2046 # word splitting is the point
 sb_configure --prefix=/usr CXXFLAGS="$(sb_cflags) $([ "$SB_FAMILY" = elf ] && echo -static)" \
   LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s"
 make -j "$SB_JOBS"
