@@ -46,8 +46,20 @@ fi
 sb_git https://github.com/ProcursusTeam/ldid.git "$SB_VERSION" ldid
 sb_cd "$SB_WORK/src/ldid"
 
-_ssl=${OPENSSL_PREFIX:-/usr}
-make -j "$SB_JOBS" \
+# Alpine's openssl-dev ships no libcrypto.a either, so a static ldid needs its
+# own OpenSSL. Same flags as tools/openssl: one archive, no engines, no modules.
+_ssl=${OPENSSL_PREFIX:-$SB_WORK/openssl}
+if [ ! -f "$_ssl/lib/libcrypto.a" ]; then
+  _ossl=$(sb_fetch "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION:-3.4.0}/openssl-${OPENSSL_VERSION:-3.4.0}.tar.gz")
+  sb_unpack "$_ossl" "$SB_WORK/src/openssl-ldid"
+  sb_cd "$SB_WORK/src/openssl-ldid/openssl-${OPENSSL_VERSION:-3.4.0}"
+  ./Configure "$([ "$SB_ARCH" = arm64 ] && echo linux-aarch64 || echo linux-x86_64)" \
+    no-shared no-module no-tests no-docs no-legacy no-engine \
+    --prefix="$_ssl" --openssldir=/etc/ssl --libdir=lib -static -fPIC
+  make -j "$SB_JOBS" build_libs
+  make install_dev
+fi
+make -j "$SB_JOBS" VERSION="$SB_VERSION" \
   CXXFLAGS="$(sb_cflags) -I$_plist/include -std=c++17 -DHAVE_OPENSSL" \
   LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s" \
   LIBPLIST_INCLUDES="-I$_plist/include" \
