@@ -53,7 +53,12 @@ if [ ! -f "$_ssl/lib/libcrypto.a" ]; then
   _ossl=$(sb_fetch "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION:-3.4.0}/openssl-${OPENSSL_VERSION:-3.4.0}.tar.gz")
   sb_unpack "$_ossl" "$SB_WORK/src/openssl-ldid"
   sb_cd "$SB_WORK/src/openssl-ldid/openssl-${OPENSSL_VERSION:-3.4.0}"
-  ./Configure "$([ "$SB_ARCH" = arm64 ] && echo linux-aarch64 || echo linux-x86_64)" \
+  case "$SB_TARGET" in
+    linux-arm64) _bt=linux-aarch64 ;;
+    macos-arm64) _bt=darwin64-arm64-cc ;;
+    *)           _bt=linux-x86_64 ;;
+  esac
+  ./Configure "$_bt" \
     no-shared no-module no-tests no-docs no-legacy no-engine \
     --prefix="$_ssl" --openssldir=/etc/ssl --libdir=lib -static -fPIC
   make -j "$SB_JOBS" build_libs
