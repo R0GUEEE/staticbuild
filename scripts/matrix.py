@@ -98,6 +98,7 @@ def main():
             "tier": blk.get("tier", "sfx"),
             "runs-on": TARGETS[tid]["runs-on"],
             "container": TARGETS[tid]["container"] or "",
+            "image": TARGETS[tid]["container"] or "",
             "family": TARGETS[tid]["family"],
             "budget_mb": blk.get("size_budget_mb", 0),
             "smoke": blk.get("smoke", ""),

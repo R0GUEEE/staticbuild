@@ -1,8 +1,9 @@
 name: build
 
 # One job per (tool, target), matrix generated from manifest/tools.json.
-# ELF targets build in Alpine on arm64 runners; Mach-O targets build on macOS.
-# Two jobs rather than one because a container cannot be conditional.
+# ELF targets build inside an arm64 Alpine container (docker run, because
+# GitHub's JavaScript actions refuse to run inside an arm64 container);
+# Mach-O targets build natively on macOS.
 on:
   push:
     branches: [main]
@@ -53,11 +54,13 @@ jobs:
           if ids:
               cmd += ["--ids", ",".join(ids)]
           m = json.loads(subprocess.check_output(cmd))
+          elf = [j for j in m["include"] if j["family"] == "elf"]
+          mac = [j for j in m["include"] if j["family"] == "macho"]
           print("target=" + target)
-          print("elf_count=" + str(len([j for j in m["include"] if j["family"] == "elf"])))
-          print("macho_count=" + str(len([j for j in m["include"] if j["family"] == "macho"])))
-          print("elfc=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "elf"]}))
-          print("macho=" + json.dumps({"include": [j for j in m["include"] if j["family"] == "macho"]}))
+          print("elf_count=" + str(len(elf)))
+          print("macho_count=" + str(len(mac)))
+          print("elfc=" + json.dumps({"include": elf}))
+          print("macho=" + json.dumps({"include": mac}))
           PY
         env:
           INPUT_TARGET: ${{ inputs.target }}
@@ -69,28 +72,35 @@ jobs:
   elf:
     needs: plan
     if: ${{ needs.plan.outputs.elf_count > 0 }}
+    name: ${{ matrix.id }} (${{ matrix.target }})
     strategy:
       fail-fast: false
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.elfc) }}
     runs-on: ${{ matrix.runs-on }}
-    container: alpine:3.21
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
-      - name: build deps
-        run: |
-          apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz \
-            tar gzip bzip2 perl pkgconf make autoconf automake libtool \
-            zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
-            gettext-dev libffi-dev libxml2-dev
       - uses: actions/cache@v4
         with:
           path: build/cache
           key: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
           restore-keys: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
-      - name: build
-        run: make "tools/${{ matrix.id }}" TARGET='${{ matrix.target }}' JOBS=$(getconf _NPROCESSORS_ONLN)
+      - name: build in alpine
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e SB_TARGET="${{ matrix.target }}" \
+            -e SB_SKIP_VERIFY=0 \
+            "${{ matrix.image }}" /bin/sh -c '
+              set -eu
+              apk add --no-cache build-base clang cmake ninja python3 curl git zstd xz \
+                tar gzip bzip2 perl pkgconf make autoconf automake libtool \
+                zlib-dev zstd-dev xz-dev bzip2-dev openssl-dev libmd-dev linux-headers \
+                gettext-dev libffi-dev libxml2-dev
+              make "tools/${{ matrix.id }}" TARGET="$SB_TARGET" JOBS=$(getconf _NPROCESSORS_ONLN)
+            '
+          sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
       - name: size
         run: |
           ls -l dist/
@@ -107,6 +117,7 @@ jobs:
   macho:
     needs: plan
     if: ${{ needs.plan.outputs.macho_count > 0 }}
+    name: ${{ matrix.id }} (${{ matrix.target }})
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -116,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: build deps
-        run: brew install cmake ninja zstd xz gnu-tar || true
+        run: brew install cmake ninja zstd xz || true
       - uses: actions/cache@v4
         with:
           path: build/cache
