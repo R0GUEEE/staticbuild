@@ -1,5 +1,5 @@
 #!/bin/sh
-# deps: build-base cmake libplist-dev libcrypto++? (ldid: openssl)
+# deps: build-base cmake openssl-dev git
 # ldid — the signer every jailbreak-adjacent tool needs. Procursus fork:
 # it understands entitlements, DER entitlements and ad-hoc signatures on device.
 . "$(dirname "$0")/_common.sh"

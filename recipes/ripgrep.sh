@@ -18,8 +18,18 @@ src=$(sb_fetch "https://github.com/BurntSushi/ripgrep/archive/refs/tags/$SB_VERS
 sb_unpack "$src" "$SB_WORK/src/rg"
 sb_cd "$SB_WORK/src/rg/ripgrep-$SB_VERSION"
 
-cargo build --release --target "$_t" --locked
+# When the host *is* the target (Alpine's rustc is already musl), passing
+# --target would look for a rust-std component that the distro package does not
+# ship. Build natively in that case.
+_host=$(rustc -vV | sed -n 's/^host: //p')
+if [ "$_host" = "$_t" ]; then
+  cargo build --release --locked
+  _out="target/release/rg"
+else
+  cargo build --release --target "$_t" --locked
+  _out="target/$_t/release/rg"
+fi
 
-sb_bin "target/$_t/release/rg" rg
+sb_bin "$_out" rg
 export SB_PATHS=bin
 sb_finish

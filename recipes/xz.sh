@@ -10,8 +10,8 @@ sb_cd "$SB_WORK/src/xz/xz-$SB_VERSION"
 
 ./configure --disable-shared --enable-static --disable-nls --disable-doc \
   --disable-ifunc --prefix=/usr \
-  CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
-make -j "$SB_JOBS"
+  CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
+make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 
 sb_bin src/xz/xz xz
 sb_symlinks unxz xzcat lzma unzlzma
