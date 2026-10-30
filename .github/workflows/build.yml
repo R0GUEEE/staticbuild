@@ -63,7 +63,8 @@ jobs:
           INPUT_TARGET: ${{ inputs.target }}
           INPUT_TOOLS: ${{ inputs.tools }}
       - name: announce
-        run: echo "::notice::${{ steps.m.outputs.target }}: ${{ steps.m.outputs.elf_count }} ELF jobs, ${{ steps.m.outputs.macho_count }} Mach-O jobs"
+        run: |
+          echo "::notice::${{ steps.m.outputs.target }}: ${{ steps.m.outputs.elf_count }} ELF jobs, ${{ steps.m.outputs.macho_count }} Mach-O jobs"
 
   elf:
     needs: plan
