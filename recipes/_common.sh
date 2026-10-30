@@ -335,6 +335,20 @@ sb_stub() {
     log "building carrier stub for $SB_TARGET"
     sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" >/dev/null 2>&1 || true
   fi
+  if [ ! -x "$_stub" ]; then
+    # An iOS carrier needs cgo + the iOS SDK, which only a macOS runner with
+    # Xcode can produce. Until that slice exists, the macOS arm64 carrier is the
+    # one that loads in the same process model: the bundle has to be re-signed
+    # by the enclosing app either way.
+    case "$SB_TARGET" in
+      ios-*) _alt=$SB_WORK/stub/sb-stub-macos-arm64 ;;
+      *)     _alt= ;;
+    esac
+    if [ -n "$_alt" ] && [ -x "$_alt" ]; then
+      warn "no iOS carrier stub; using the macOS arm64 carrier (re-sign in the host app)"
+      _stub=$_alt
+    fi
+  fi
   [ -x "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh)"
   printf '%s\n' "$_stub"
 }

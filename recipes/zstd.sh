@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base
 # zstd — the payload format of every bundle in this repo, so it ships first.
 . "$(dirname "$0")/_common.sh"
@@ -13,9 +14,7 @@ case "$SB_FAMILY" in
   macho) _ld="" ;;
 esac
 
-# shellcheck disable=SC2046 # word splitting is the point
 make -C lib -j "$SB_JOBS" libzstd.a CFLAGS="$(sb_cflags)"
-# shellcheck disable=SC2046 # word splitting is the point
 make -C programs -j "$SB_JOBS" zstd MOREFLAGS="$(sb_cflags) $_ld -DZSTD_MULTITHREAD"
 
 sb_bin programs/zstd zstd

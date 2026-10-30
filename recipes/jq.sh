@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base autoconf automake libtool
 # jq — the tool every packaging script reaches for, and a good static-musl canary.
 . "$(dirname "$0")/_common.sh"
@@ -12,7 +13,6 @@ sb_cd "$SB_WORK/src/jq/jq-$SB_VERSION"
 # -all-static. configure's probe link is a plain cc invocation though, so the
 # flag can only be applied at make time, never in the configure environment.
 sb_configure --disable-maintainer-mode --disable-docs --with-oniguruma=builtin \
-  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
 make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 sb_bin jq jq

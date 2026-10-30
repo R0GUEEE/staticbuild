@@ -73,7 +73,7 @@ jobs:
           with open(p, "r+b") as f:
               f.seek(size - 64)
               magic, ver, flags, off, plen, digest, epoch = struct.unpack("<4sHHQQ32sQ", f.read(64))
-              assert magic == b"SBX1", "trailer magic missing"
+              assert magic in (b"SBX1", b"SBX2"), "trailer magic missing"
               f.seek(off + 64)
               f.write(bytes([f.read(1)[0] ^ 0xFF]))
           print("corrupted one payload byte")

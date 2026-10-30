@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base curl-dev expat-dev zlib-dev openssl-dev perl gettext-dev
 # git — core only. git-svn, git-gui, gitk and the docs are deliberately absent:
 # they drag in Perl chains and Tcl, and nobody builds iOS apps with gitk.
@@ -16,7 +17,6 @@ make -j "$SB_JOBS" \
   NO_GETTEXT=YesPlease NO_TCLTK=YesPlease NO_PERL=YesPlease NO_PYTHON=YesPlease \
   NO_INSTALL_HARDLINKS=YesPlease NO_OPENSSL=YesPlease \
   USE_LIBPCRE2=NoThanks NO_REGEX=NeedsStartEnd \
-  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="$_ld" \
   all
 

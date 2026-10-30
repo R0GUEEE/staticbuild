@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base autoconf automake gettext-dev zlib-dev bzip2-dev xz-dev zstd-dev libmd-dev
 # dpkg tooling, reduced to what produces and inspects .deb files.
 #
@@ -14,7 +15,6 @@ sb_cd "$SB_WORK/src/dpkg/dpkg-$SB_VERSION"
 sb_configure --prefix=/usr --disable-shared --enable-static \
   --disable-dselect --disable-start-stop-daemon \
   --disable-update-alternatives --without-libselinux --disable-nls \
-  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static -s)"
 
 make -C lib -j "$SB_JOBS" || die "dpkg: libdpkg failed"

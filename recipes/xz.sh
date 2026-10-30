@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base autoconf automake libtool gettext-dev
 # XZ Utils — needed by dpkg-deb for -Zxz and by every .tar.xz source tarball.
 . "$(dirname "$0")/_common.sh"
@@ -10,7 +11,6 @@ sb_cd "$SB_WORK/src/xz/xz-$SB_VERSION"
 
 sb_configure --disable-shared --enable-static --disable-nls --disable-doc \
   --disable-ifunc --prefix=/usr \
-  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
 make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 

@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base
 # BusyBox — 400 applets in one file. Recipes use it as the shell layer for
 # anything that expects `sh`, `sed`, `awk`, `xargs` to exist inside a sandbox.
@@ -76,7 +77,6 @@ while read -r line; do
   grep -q "^$key=" .config && sed -i "s|^$key=.*|$line|" .config || echo "$line" >> .config
 done < "$SB_WORK/bb.fragment"
 yes "" | make oldconfig >/dev/null 2>&1 || true
-# shellcheck disable=SC2046 # word splitting is the point
 make -j "$SB_JOBS" CFLAGS_EXTRA="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
 
 sb_bin busybox busybox

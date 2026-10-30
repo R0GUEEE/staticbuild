@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base openssl-dev (or OPENSSL_STATIC=1)
 # curl — the only way most downstream projects fetch a bundle, so it must be small
 # and must not depend on the host's TLS stack.
@@ -22,7 +23,6 @@ sb_configure --prefix=/usr --disable-shared --enable-static \
   --without-zstd --without-libpsl --disable-ldap --disable-ldaps --disable-manual \
   --with-ssl="${OPENSSL_PREFIX:-$SB_WORK/openssl}" \
   --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
-  # shellcheck disable=SC2046 # word splitting is the point
   CFLAGS="$(sb_cflags) -I${OPENSSL_PREFIX:-$SB_WORK/openssl}/include" \
   LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -L${OPENSSL_PREFIX:-$SB_WORK/openssl}/lib"
 

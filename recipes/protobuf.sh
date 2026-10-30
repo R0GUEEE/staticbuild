@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base cmake git
 # protoc — needs abseil and utf8_range as siblings; the submodules are the whole
 # recipe. Well-known types ship in include/ so `--proto_path` works offline.
@@ -11,14 +12,12 @@ if [ ! -d "$SB_WORK/src/protobuf/.git" ]; then
 fi
 sb_cd "$SB_WORK/src/protobuf"
 
-# shellcheck disable=SC2046 # deliberate word splitting
 cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -Dprotobuf_BUILD_TESTS=OFF \
   -Dprotobuf_BUILD_CONFORMANCE=OFF \
   -Dprotobuf_BUILD_EXAMPLES=OFF \
   -Dprotobuf_ABSL_PROVIDER=module \
-  # shellcheck disable=SC2046 # word splitting is the point
   -DCMAKE_CXX_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s" \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON

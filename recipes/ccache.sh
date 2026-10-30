@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base cmake zstd-dev
 # ccache — turns the 40-minute LLVM rebuild above into a 4-minute one.
 . "$(dirname "$0")/_common.sh"
@@ -12,14 +13,11 @@ _DEFS="-DREDIS_STORAGE_BACKEND=OFF -DENABLE_DOCS=OFF -DENABLE_TESTING=OFF -DDEPS
 
 case "$SB_FAMILY" in
   elf)
-    # shellcheck disable=SC2046 # word splitting is the point
     cmake -B out $(sb_cmake_args) -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
       -DZSTD_FROM_INTERNET=ON \
-      # shellcheck disable=SC2046 # word splitting is the point
       -DCMAKE_CXX_FLAGS="$(sb_cflags)" -DCMAKE_EXE_LINKER_FLAGS="-static -s"
     ;;
   macho)
-    # shellcheck disable=SC2046 # word splitting is the point
     cmake -B out $(sb_cmake_args) -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $_DEFS \
       -DZSTD_FROM_INTERNET=ON \
       -DCMAKE_OSX_ARCHITECTURES="$SB_ARCH" -DCMAKE_OSX_SYSROOT="${SB_SDK:-iphoneos}"

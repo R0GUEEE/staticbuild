@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2046 # sb_cmake_args/sb_cflags are flag lists
 # deps: build-base
 # GNU make 4.4.1 — Theos makefiles need GNU semantics, not BSD make.
 . "$(dirname "$0")/_common.sh"
@@ -22,12 +23,10 @@ case "$SB_FAMILY" in
     ;;
   elf)
     sb_configure --disable-nls --without-guile --prefix=/usr \
-      # shellcheck disable=SC2046 # word splitting is the point
       CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
     ;;
   macho)
     sb_configure --disable-nls --without-guile --prefix=/usr \
-      # shellcheck disable=SC2046 # word splitting is the point
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_cflags) -Wl,-dead_strip"
     ;;
 esac
