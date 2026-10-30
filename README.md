@@ -49,6 +49,17 @@ Full list, versions, sizes and licences: [`manifest/tools.json`](manifest/tools.
 
 Not all of these can run *on* iOS. The catalog says so per target instead of quietly omitting them — `swiftc`, `rustc`, `go`, `zig`, the JVM and `xtool` are cross compilers, so their iOS story is a `macos-arm64` or `linux-arm64` bundle that emits iOS binaries. [`docs/caveats.md`](docs/caveats.md) has the full table with reasons.
 
+### Status — what CI has actually produced
+
+Green means: built, verified (tier, size budget, smoke run in a clean env) and uploaded as an artifact.
+
+| target | green | written but not yet exercised by CI |
+|---|---|---|
+| `linux-arm64` | `busybox`, `jq`, `ldid`, `make`, `ninja`, `openssl`, `patchelf`, `ripgrep`, `xz`, `zstd` | `llvm`, `swift`, `rust`, `go`, `zig`, `python`, `node`, `typescript`, `java`, `kotlin`, `cmake`, `meson`, `dpkg`, `tar`, `curl`, `git`, `fakeroot`, `ccache`, `protobuf`, `qemu`, `proot`, `theos` |
+| `ios-arm64` / `macos-arm64` | — | every recipe; the Mach-O path needs a macOS runner pass |
+
+The green column is not a claim about the rest: those recipes are written, reviewed and shellcheck-clean, but a recipe that has never run is a recipe with a bug in it. The CI run for this repository is the honest source of truth — open Actions and read the matrix.
+
 ---
 
 ## Install
