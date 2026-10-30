@@ -24,13 +24,18 @@ sb_cd "$SB_WORK/src/rg/ripgrep-$SB_VERSION"
 # requested target is installed: if it is, cross-build with --target; if not, the
 # host already is that target and a native build is correct.
 _sysroot=$(rustc --print sysroot)
+if [ ! -d "$_sysroot/lib/rustlib/$_t/lib" ] && command -v rustup >/dev/null 2>&1; then
+  log "rust-std for $_t missing; rustup target add $_t"
+  rustup target add "$_t" >/dev/null 2>&1 || true
+fi
 if [ -d "$_sysroot/lib/rustlib/$_t/lib" ]; then
   cargo build --release --locked --target "$_t"
   _out="target/$_t/release/rg"
 else
-  log "rust-std for $_t is not installed; building for the host"
-  cargo build --release --locked
-  _out="target/release/rg"
+  # A host build is how an ios-arm64 artifact ends up being a macOS executable.
+  # Refuse: verify.py would catch the wrong platform later, but the recipe
+  # should never produce it in the first place.
+  die "rust-std for $_t is not installed; a host build would be the wrong platform"
 fi
 
 sb_bin "$_out" rg

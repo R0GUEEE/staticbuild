@@ -163,6 +163,23 @@ jobs:
             '
           sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
 
+      - name: sdk probe
+        # Three lines that must work before a 40-minute build starts, and fail
+        # in 90 s if they do not. When the Mach-O jobs hung for an hour this
+        # was the missing evidence: xcrun, not the recipe.
+        if: matrix.family == 'macho'
+        timeout-minutes: 8
+        run: |
+          set -x
+          xcodebuild -version
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK=$SDK"
+          printf 'int main(void){return 0;}\n' > /tmp/probe.c
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" \
+            -miphoneos-version-min=15.0 -o /tmp/probe /tmp/probe.c
+          file /tmp/probe
+          python3 scripts/checkbin.py /tmp/probe
+
       - name: build (native)
         if: matrix.family != 'elf'
         env:

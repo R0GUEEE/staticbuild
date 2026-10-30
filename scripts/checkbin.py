@@ -122,6 +122,15 @@ def pe(data: bytes) -> dict:
             "pointer_bits": 64 if pe32plus else 32}
 
 
+PLATFORMS = {1: "macos", 2: "ios", 3: "tvos", 4: "watchos", 5: "bridgeos",
+             6: "maccatalyst", 7: "ios-simulator", 8: "tvos-simulator",
+             9: "watchos-simulator", 10: "driverkit"}
+
+
+def _ver(v: int) -> str:
+    return "%d.%d.%d" % ((v >> 16) & 0xFFFF, (v >> 8) & 0xFF, v & 0xFF)
+
+
 def macho(data: bytes) -> dict:
     magic, = struct.unpack_from(">I", data, 0)
     if magic in FAT_MAGIC:
@@ -150,6 +159,8 @@ def macho_slice(data: bytes) -> dict:
     kind = {2: "exe", 6: "dylib", 8: "bundle", 11: "kext"}.get(filetype, "exe")
     off = 32 if bits == 64 else 28
     needed = []
+    plat = None
+    minos = None
     for _ in range(ncmds):
         cmd, cmdsize = struct.unpack_from(endian + "II", data, off)
         if cmd in (0xC, 0x18 | 0x80000000, 0x1F | 0x80000000):  # LOAD_DYLIB / WEAK / REEXPORT
@@ -157,10 +168,27 @@ def macho_slice(data: bytes) -> dict:
             start = off + name_off
             end = data.index(b"\0", start)
             needed.append(data[start:end].decode("utf-8", "replace"))
+        elif cmd == 0x32:  # LC_BUILD_VERSION
+            # platform: 1 macOS, 2 iOS, 3 tvOS, 4 watchOS, 6 Mac Catalyst,
+            # 7 iOS simulator, 8 tvOS simulator, 9 watchOS simulator, 10 DriverKit
+            p, m, _sdk = struct.unpack_from(endian + "III", data, off + 8)
+            plat = PLATFORMS.get(p, "platform-%d" % p)
+            minos = _ver(m)
+        elif cmd == 0x24:  # LC_VERSION_MIN_MACOSX
+            v, = struct.unpack_from(endian + "I", data, off + 8)
+            plat, minos = plat or "macos", minos or _ver(v)
+        elif cmd == 0x25:  # LC_VERSION_MIN_IPHONEOS
+            v, = struct.unpack_from(endian + "I", data, off + 8)
+            plat, minos = plat or "ios", minos or _ver(v)
+        elif cmd == 0x2F:  # LC_VERSION_MIN_TVOS
+            plat = plat or "tvos"
+        elif cmd == 0x30:  # LC_VERSION_MIN_WATCHOS
+            plat = plat or "watchos"
         off += cmdsize
         if off > len(data):
             break
-    return {"format": "macho", "arch": arch, "needed": needed, "kind": kind, "bits": bits}
+    return {"format": "macho", "arch": arch, "needed": needed, "kind": kind,
+            "bits": bits, "platform": plat, "minos": minos}
 
 
 def inspect(path: str) -> dict:

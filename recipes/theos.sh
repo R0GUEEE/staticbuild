@@ -11,14 +11,19 @@
 . "$(dirname "$0")/_common.sh"
 sb_init
 
+# Theos versions itself by git tag (2.x); it has no 2024.11. Logos only tags
+# 1.0.0 and then moves on master, so it is pinned by commit.
 sb_git https://github.com/theos/theos.git "$SB_VERSION" theos || die "theos clone failed"
+SB_THEOS_COMMIT=$(git -C "$SB_WORK/src/theos" rev-parse HEAD)
 
-# Logos lives in its own repo and is vendored under bin/
 if [ ! -d "$SB_WORK/src/theos/bin/logos" ]; then
-  git clone --depth 1 --branch "$SB_VERSION" https://github.com/theos/logos.git \
-    "$SB_WORK/src/theos/bin/logos" 2>/dev/null || \
-  git clone --depth 1 https://github.com/theos/logos.git "$SB_WORK/src/theos/bin/logos"
+  sb_git https://github.com/theos/logos.git "${SB_LOGOS_COMMIT:-365a4e7028234e90bc2cbc724e5c87607130d3b3}" \
+    theos-logos || die "logos clone failed"
+  mkdir -p "$SB_WORK/src/theos/bin"
+  rm -rf "$SB_WORK/src/theos/bin/logos"
+  mv "$SB_WORK/src/theos-logos" "$SB_WORK/src/theos/bin/logos"
 fi
+SB_LOGOS_SHA=$(git -C "$SB_WORK/src/theos/bin/logos" rev-parse HEAD)
 
 mkdir -p "$SB_STAGE/theos"
 ( cd "$SB_WORK/src/theos" && tar -cf - \
@@ -50,4 +55,7 @@ export SB_PATHS="bin"
 export SB_ENTRY="bin/theos"
 export SB_REQUIRE="clang make ldid dpkg-deb perl"
 export SB_ENV='"THEOS": "${ROOT}/theos"'
+
+# The artifact name carries the theos tag; what actually runs is two commits.
+printf 'theos %s\nlogos %s\n' "$SB_THEOS_COMMIT" "$SB_LOGOS_SHA" > "$SB_STAGE/theos/.provenance"
 sb_finish
