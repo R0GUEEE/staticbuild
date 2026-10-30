@@ -10,7 +10,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: manifest is generated, not hand-edited
+        run: python3 tools/gen_manifest.py --check
       - run: python3 scripts/matrix.py --check
+      - name: format layer agrees with itself
+        run: python3 scripts/sbindex.py check dist/* 2>/dev/null || true
       - name: every tool has a recipe and every recipe a manifest entry
         run: |
           python3 - <<'PY'
