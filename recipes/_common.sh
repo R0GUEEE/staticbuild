@@ -50,8 +50,17 @@ esac
 SB_EFFECTIVE_TIER=${SB_TIER:-sfx}
 export SB_ARCH SB_TRIPLE SB_FAMILY SB_EFFECTIVE_TIER
 
-log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
+# Progress goes to stderr: recipes capture function output in $( ) to get paths
+# (src=$(sb_fetch ...)), so a chatty stdout corrupts the value. This bit CI once.
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+  log()  { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
+  warn() { printf '\033[1;33m!!!\033[0m %s\n' "$*" >&2; }
+  die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }
+else
+  log()  { printf '==> %s\n' "$*" >&2; }
+  warn() { printf '!!! %s\n' "$*" >&2; }
+  die()  { printf 'ERR %s\n' "$*" >&2; exit 1; }
+fi
 die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------- environment
