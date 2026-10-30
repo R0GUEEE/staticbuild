@@ -121,22 +121,23 @@ verify_one() {
   _name=$(basename "$_artifact")
   head_ "$_name ($(wc -c < "$_artifact" | tr -d ' ') B)"
 
-  _budget=$(python3 - "$MANIFEST" "$_name" <<'PY'
-import json, sys, os, re
+  _budget=$(python3 - "$MANIFEST" "$_name" <<'SBLOOKUP'
+import json, sys
 m = json.load(open(sys.argv[1]))
 name = sys.argv[2]
 # clang-20.1.8-linux-arm64 -> id clang, target linux-arm64
 for t in m["tools"]:
     for tgt, blk in t.get("targets", {}).items():
         if name.startswith(t["id"] + "-") and name.endswith("-" + tgt):
-            print(blk.get("size_budget_mb", 0), blk.get("smoke", ""), tgt, sep="\t")
+            print(t["id"], blk.get("size_budget_mb", 0), blk.get("smoke", ""), tgt, sep="\t")
             sys.exit(0)
-print("0\t\t")
-PY
+print("\t0\t\t")
+SBLOOKUP
 )
-  _mb=$(echo "$_budget" | cut -f1)
-  _smoke=$(echo "$_budget" | cut -f2)
-  _tgt=$(echo "$_budget" | cut -f3)
+  _id=$(echo "$_budget" | cut -f1)
+  _mb=$(echo "$_budget" | cut -f2)
+  _smoke=$(echo "$_budget" | cut -f3)
+  _tgt=$(echo "$_budget" | cut -f4)
 
   # A bundle's first four bytes are the ELF/Mach-O magic of its stub, so the
   # trailer is the only reliable discriminator.
@@ -178,7 +179,11 @@ PY
 
   if [ -n "${_smoke:-}" ]; then
     _exec=${_bin:-$_artifact}
-    _bindir=$(dirname "$_exec")
+    # The artifact is named <tool>-<version>-<target>; the smoke command calls the
+    # tool by its real name. A symlink bridge keeps both honest.
+    mkdir -p "$TMP/run"
+    ln -sf "$(cd "$(dirname "$_exec")" && pwd)/$(basename "$_exec")" "$TMP/run/${_id:-$(basename "$_artifact")}"
+    _bindir=$TMP/run
     if ( cd "$TMP" && env -i PATH="$_bindir:/usr/bin:/bin" HOME="$TMP" TMPDIR="$TMP" \
            SB_CACHE="$TMP/cache" sh -c "$_smoke" ) >"$TMP/smoke.log" 2>&1; then
       ok "smoke: $_smoke"

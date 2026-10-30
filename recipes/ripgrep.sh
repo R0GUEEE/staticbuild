@@ -18,11 +18,12 @@ src=$(sb_fetch "https://github.com/BurntSushi/ripgrep/archive/refs/tags/$SB_VERS
 sb_unpack "$src" "$SB_WORK/src/rg"
 sb_cd "$SB_WORK/src/rg/ripgrep-$SB_VERSION"
 
-# When the host *is* the target (Alpine's rustc is already musl), passing
-# --target would look for a rust-std component that the distro package does not
-# ship. Build natively in that case.
-_host=$(rustc -vV | sed -n 's/^host: //p')
-if [ "$_host" = "$_t" ]; then
+# Alpine's rustc is a musl build but its host triple is aarch64-alpine-linux-musl,
+# so comparing triples is not enough. What matters is whether rust-std for the
+# requested target is installed: if it is not, build natively instead of failing
+# with "can't find crate for core".
+_sysroot=$(rustc --print sysroot)
+if [ -d "$_sysroot/lib/rustlib/$_t/lib" ]; then
   cargo build --release --locked
   _out="target/release/rg"
 else

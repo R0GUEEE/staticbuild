@@ -1,23 +1,34 @@
 #!/bin/sh
-# deps: build-base cmake openssl-dev git
+# deps: build-base make pkgconf libplist-dev openssl-dev git
 # ldid — the signer every jailbreak-adjacent tool needs. Procursus fork:
-# it understands entitlements, DER entitlements and ad-hoc signatures on device.
+# entitlements, DER entitlements and ad-hoc signatures for on-device use.
+#
+# No CMakeLists here (that was an assumption, and CI proved it wrong): ldid is a
+# one-file C++ program built by a plain Makefile that asks pkg-config for
+# libplist-2.0 and libcrypto. Static linking therefore means pointing those two
+# variables at the .a files rather than the .so ones.
 . "$(dirname "$0")/_common.sh"
 sb_init
 
-sb_git https://github.com/ProcursusTeam/ldid.git "$SB_VERSION" ldid --recurse
+sb_git https://github.com/ProcursusTeam/ldid.git "$SB_VERSION" ldid
 sb_cd "$SB_WORK/src/ldid"
 
-# ldid vendors libplist; OPENSSL comes from the system or the openssl recipe.
-cmake -B out -G "Unix Makefiles" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_FLAGS="$(sb_cflags)" \
-  -DCMAKE_CXX_FLAGS="$(sb_cflags)" \
-  -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -L${OPENSSL_PREFIX:-/usr/lib} -lcrypto -lpthread" \
-  -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-s"
-cmake --build out -j "$SB_JOBS"
+_prefix=${OPENSSL_PREFIX:-/usr}
+_plist=$(pkg-config --cflags libplist-2.0 2>/dev/null || echo "-I/usr/include")
 
-sb_bin out/ldid ldid
-sb_bin out/ldid ldid2
-export SB_PATHS=bin
+make -j "$SB_JOBS" \
+  CXXFLAGS="$(sb_cflags) $_plist -std=c++17 -DHAVE_OPENSSL" \
+  LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static) -s" \
+  LIBPLIST_INCLUDES="$_plist" \
+  LIBPLIST_LIBS="$_prefix/lib/libplist-2.0.a" \
+  LIBCRYPTO_INCLUDES="-I$_prefix/include" \
+  LIBCRYPTO_LIBS="$_prefix/lib/libcrypto.a"
+
+[ -x ldid ] || die "ldid binary was not produced"
+
+sb_bin ldid ldid
+sb_bin ldid ldid2
+
+export SB_PATHS="bin"
+export SB_ENTRY="bin/ldid"
 sb_finish
