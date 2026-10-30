@@ -1348,7 +1348,7 @@
   {
    "id": "kotlin",
    "name": "Kotlin",
-   "version": "2.0.21",
+   "version": "2.1.0",
    "license": "Apache-2.0",
    "method": "release",
    "upstream": "https://github.com/JetBrains/kotlin/releases",
@@ -4089,14 +4089,14 @@
   {
    "id": "zig",
    "name": "Zig",
-   "version": "0.13.0",
+   "version": "0.14.0",
    "license": "MIT",
    "method": "release",
    "upstream": "https://ziglang.org/download/",
    "provides": [
     "zig"
    ],
-   "source": "0.13.0",
+   "source": "0.14.0",
    "targets": {
     "linux-x86_64": {
      "tier": "static",

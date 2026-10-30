@@ -71,5 +71,5 @@ a row here in the same pull request. CI does not judge licences; a human does.
   enforces the claim rather than trusting the label.
 * macOS runners cannot build static ELF without a cross toolchain. CI builds ELF
   on `ubuntu-24.04-arm` in an Alpine container; the Mach-O targets build on
-  `macos-14`. Do not mix them up, the failure mode is a linked-against-glibc
+  `macos-15`. Do not mix them up, the failure mode is a linked-against-glibc
   binary that "works" in CI and dies in the guest.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# deps: build-base autoconf automake gettext-dev zlib-dev libbz2-dev liblzma-dev libzstd-dev libmd-dev
+# deps: build-base autoconf automake gettext-dev zlib-dev bzip2-dev xz-dev zstd-dev libmd-dev
 # dpkg tooling, reduced to what produces and inspects .deb files.
 #
 # Deliberately not built: dpkg itself as an installer (needs a root-owned
@@ -11,7 +11,8 @@ src=$(sb_fetch "https://deb.debian.org/debian/pool/main/d/dpkg/dpkg_${SB_VERSION
 sb_unpack "$src" "$SB_WORK/src/dpkg"
 sb_cd "$SB_WORK/src/dpkg/dpkg-$SB_VERSION"
 
-./configure --prefix=/usr --disable-dselect --disable-start-stop-daemon \
+./configure --prefix=/usr --disable-shared --enable-static \
+  --disable-dselect --disable-start-stop-daemon \
   --disable-update-alternatives --without-libselinux --disable-nls \
   CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static -s)"
 

@@ -350,7 +350,7 @@ TOOLS.append(tool(
     }, "bin/go", source="go1.23.9"))
 
 TOOLS.append(tool(
-    "zig", "Zig", "0.13.0", "MIT", "release",
+    "zig", "Zig", "0.14.0", "MIT", "release",
     "https://ziglang.org/download/",
     ["zig"],
     {
@@ -376,7 +376,7 @@ TOOLS.append(tool(
             note="zig can compile for aarch64-ios given the SDK; the binary still has "
                  "to be signed by the enclosing app"),
         "ios-arm64-sim": cell("static", "experimental", budget=180, note="simulator target"),
-    }, "bin/zig", source="0.13.0"))
+    }, "bin/zig", source="0.14.0"))
 
 TOOLS.append(tool(
     "python", "CPython", "3.12.7", "PSF-2.0", "release",
@@ -494,7 +494,7 @@ TOOLS.append(tool(
     }, "bin/java", source="21.0.5"))
 
 TOOLS.append(tool(
-    "kotlin", "Kotlin", "2.0.21", "Apache-2.0", "release",
+    "kotlin", "Kotlin", "2.1.0", "Apache-2.0", "release",
     "https://github.com/JetBrains/kotlin/releases",
     ["kotlinc", "kotlin", "kotlinc-jvm", "kapt"],
     {

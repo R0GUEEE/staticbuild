@@ -108,6 +108,10 @@ def main() -> int:
     except sbx.ZstdError as exc:
         sys.exit(f"pack: {exc}")
 
+    # A bundle is an executable; without this the artifact is a 0600 file and
+    # every `run the artifact` gate dies with exit 126 (Permission denied).
+    os.chmod(args.out, 0o755)
+
     info["out"] = args.out
     if not args.quiet:
         print(json.dumps(info))
