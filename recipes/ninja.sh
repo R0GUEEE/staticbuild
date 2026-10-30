@@ -10,6 +10,14 @@ sb_unpack "$src" "$SB_WORK/src/ninja"
 sb_cd "$SB_WORK/src/ninja/ninja-$SB_VERSION"
 
 case "$SB_FAMILY" in
+  pe)
+    # One translation unit per source file, no build system: ninja's own build
+    # is CMake, and cross-configuring CMake for mingw is more moving parts than
+    # compiling the 20 files directly.
+    _cc=$(sb_cc); _cxx=$(printf '%s' "$_cc" | sed 's/gcc$/g++/; s/cc$/c++/')
+    $_cxx -O2 -std=c++17 $(sb_cflags) -o ninja.exe src/*.cc || die "ninja: mingw build failed"
+    sb_bin ninja.exe ninja.exe
+    ;;
   elf)
     cmake -B out -G "Unix Makefiles" \
       -DCMAKE_BUILD_TYPE=Release \

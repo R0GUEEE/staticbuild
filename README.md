@@ -13,16 +13,32 @@ The goal is not novelty. It is that a downstream project adds `ldid`, `dpkg-deb`
 
 ---
 
-## Two platforms, two meanings of "static"
+## Four platforms, three meanings of "static"
 
-Pretending these are the same is how toolchain bundles ship broken. Every entry in the catalog is classified per target, and CI enforces the classification.
+The catalog covers Linux (5 architectures), Windows (3), macOS (2 plus a fat
+universal carrier) and iOS (device and simulator). Pretending one definition of
+"static" covers all of them is how toolchain bundles ship broken, so the
+definition is per family and CI enforces each one:
 
-| Target family | Targets | The claim | Enforced by |
-|---|---|---|---|
-| **ELF** | `linux-arm64`, `linux-x86_64` | `readelf -d` prints **zero** `DT_NEEDED`. Runs on any aarch64 kernel, including the iOS sandbox guest and a bare initramfs. | `scripts/verify.sh` |
-| **Mach-O** | `ios-arm64`, `macos-arm64` | `otool -L` lists only `/usr/lib/*`, `/System/Library/*`, `@rpath/libswift*` — the dyld shared cache. Nothing extra to embed in the app. | `scripts/verify.sh` |
+| family | the claim | enforced by |
+|---|---|---|
+| **ELF** (`linux-*`) | `readelf -d` prints **zero** `DT_NEEDED`. Runs on any kernel of that arch: the iOS sandbox guest, a scratch container, an initramfs. | `scripts/verify.py` |
+| **PE** (`windows-*`) | PE32+ whose imports are only the Win32 surface (`kernel32`, `msvcrt`, ...): static CRT, **no Visual C++ redistributable, no DLL beside the binary**. | `scripts/checkbin.py` |
+| **Mach-O** (`macos-*`, `ios-*`) | every `LC_LOAD_DYLIB` is under `/usr/lib`, `/System/Library` or `@rpath/libswift*` — the dyld shared cache. There is no `libSystem.a`; "fully static iOS binary" is a category error, zero non-system imports is the real property. | `scripts/verify.py` |
 
-On Darwin there is no `libSystem.a`; a "fully static iOS binary" is a category error. Zero non-system imports is the real, achievable property, and it is the one that shrinks an app bundle.
+[`docs/targets.md`](docs/targets.md) has the full target table, the per-language
+build route for each platform, and what universal can and cannot mean.
+
+### Universal, honestly
+
+| carrier | what it is | why it works |
+|---|---|---|
+| `macos-universal` | fat Mach-O, arm64 + x86_64 slices, each slice carrying its own native payload | `dyld` picks the slice |
+| `windows-universal` | one x86_64 PE that also carries the arm64 payload | Windows on ARM runs x64 binaries under emulation; the stub reads `PROCESSOR_ARCHITEW6432` and execs the **native** arm64 tree |
+| `linux-universal` | **not a thing** — `execve` on a foreign ELF returns `ENOEXEC` | five per-arch files, or a script that picks by `uname -m` |
+
+One file, one kernel, one header format. The manifest says so rather than
+shipping a bundle that lies.
 
 Four tiers, orthogonal to the family:
 
@@ -51,14 +67,22 @@ Not all of these can run *on* iOS. The catalog says so per target instead of qui
 
 ### Status — what CI has actually produced
 
-Green means: built, verified (tier, size budget, smoke run in a clean env) and uploaded as an artifact.
+The green column is not a claim about the rest. `ga` means built, verified and
+exercised by CI on that target; `experimental` means the recipe has a branch for
+it and it compiles, but it is not covered by the green matrix; `planned` means
+the approach is documented and the recipe branch is not written;
+`not-supported` means it is physically or upstream impossible, with the reason
+in the manifest.
 
-| target | green | written but not yet exercised by CI |
-|---|---|---|
-| `linux-arm64` | `busybox`, `jq`, `ldid`, `make`, `ninja`, `openssl`, `patchelf`, `ripgrep`, `xz`, `zstd` | `llvm`, `swift`, `rust`, `go`, `zig`, `python`, `node`, `typescript`, `java`, `kotlin`, `cmake`, `meson`, `dpkg`, `tar`, `curl`, `git`, `fakeroot`, `ccache`, `protobuf`, `qemu`, `proot`, `theos` |
-| `ios-arm64` / `macos-arm64` | — | every recipe; the Mach-O path needs a macOS runner pass |
+```sh
+python3 scripts/matrix.py --list-targets        # cells per target
+python3 scripts/matrix.py --target windows-arm64 --pretty
+python3 scripts/matrix.py --check               # manifest ↔ recipes consistency
+```
 
-The green column is not a claim about the rest: those recipes are written, reviewed and shellcheck-clean, but a recipe that has never run is a recipe with a bug in it. The CI run for this repository is the honest source of truth — open Actions and read the matrix.
+Every cell in `manifest/tools.json` carries its tier, entry point, smoke
+command, size budget and status. The honest source of truth is the Actions tab:
+open a run and read the matrix.
 
 ---
 

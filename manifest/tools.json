@@ -1,1250 +1,4348 @@
 {
-  "schema": 1,
-  "updated": "2026-10-30",
-  "targets": {
+ "schema": 2,
+ "updated": "2026-10-30",
+ "tiers": {
+  "static": "one binary, zero non-system imports (ELF: DT_NEEDED empty; PE: only kernel32/msvcrt; Mach-O: dyld cache only)",
+  "macho": "one Mach-O importing only OS-shipped dylibs",
+  "sfx": "static carrier + zstd blob region carrying a tree (compiler resources, stdlib, JRE)",
+  "layer": "sfx whose shared runtime trees are content-addressed, so two bundles carrying the same JRE/stdlib store it once on disk",
+  "none": "not buildable for this target; see notes"
+ },
+ "status_legend": {
+  "ga": "built, verified and exercised by CI on this target",
+  "experimental": "recipe exists and compiles, but the target is not covered by the green matrix",
+  "planned": "declared with a known approach, recipe branch not written yet",
+  "not-supported": "physically or upstream impossible; the reason is in notes"
+ },
+ "targets": {
+  "ios-arm64": {
+   "os": "ios",
+   "arch": "arm64",
+   "goos": "ios",
+   "goarch": "arm64",
+   "family": "macho",
+   "abi": "iphoneos",
+   "runs_on": "macos-14",
+   "container": null,
+   "meaning": "Mach-O for the iOS sandbox: nothing imported beyond libSystem/libc++/Foundation, code-signed by the host app"
+  },
+  "ios-arm64-sim": {
+   "os": "ios",
+   "arch": "arm64",
+   "goos": "iossimulator",
+   "goarch": "arm64",
+   "family": "macho",
+   "abi": "iphonesimulator",
+   "runs_on": "macos-14",
+   "container": null,
+   "meaning": "simulator slice, for running the bundle in an iOS Simulator lane"
+  },
+  "linux-386": {
+   "os": "linux",
+   "arch": "386",
+   "goos": "linux",
+   "goarch": "386",
+   "family": "elf",
+   "abi": "musl",
+   "runs_on": "ubuntu-24.04",
+   "container": "alpine:3.21",
+   "meaning": "static 32-bit x86 ELF, for containers and VMs without a 64-bit kernel"
+  },
+  "linux-arm64": {
+   "os": "linux",
+   "arch": "arm64",
+   "goos": "linux",
+   "goarch": "arm64",
+   "family": "elf",
+   "abi": "musl",
+   "runs_on": "ubuntu-24.04-arm",
+   "container": "alpine:3.21",
+   "meaning": "fully static ELF for aarch64: the iOS sandbox guest, Apple Silicon VMs, ARM servers"
+  },
+  "linux-armv7": {
+   "os": "linux",
+   "arch": "armv7",
+   "goos": "linux",
+   "goarch": "arm",
+   "family": "elf",
+   "abi": "musleabihf",
+   "runs_on": "ubuntu-24.04-arm",
+   "container": "alpine:3.21",
+   "meaning": "static EABI-hardfloat ELF for 32-bit ARM boards and old Android-era kernels"
+  },
+  "linux-riscv64": {
+   "os": "linux",
+   "arch": "riscv64",
+   "goos": "linux",
+   "goarch": "riscv64",
+   "family": "elf",
+   "abi": "musl",
+   "runs_on": "ubuntu-24.04",
+   "container": "alpine:3.21",
+   "meaning": "static riscv64 ELF (LP64D), for boards and QEMU targets"
+  },
+  "linux-universal": {
+   "os": "linux",
+   "arch": "x86_64",
+   "goos": "linux",
+   "goarch": "amd64",
+   "family": "elf",
+   "abi": "musl",
+   "runs_on": "ubuntu-24.04",
+   "container": "alpine:3.21",
+   "fat": [],
+   "meaning": "NOT a thing: the kernel will not load a foreign ELF. One file per arch is the physical limit; use the per-arch files"
+  },
+  "linux-x86_64": {
+   "os": "linux",
+   "arch": "x86_64",
+   "goos": "linux",
+   "goarch": "amd64",
+   "family": "elf",
+   "abi": "musl",
+   "runs_on": "ubuntu-24.04",
+   "container": "alpine:3.21",
+   "meaning": "fully static ELF: readelf -d prints zero DT_NEEDED; runs on any x86_64 Linux kernel"
+  },
+  "macos-arm64": {
+   "os": "macos",
+   "arch": "arm64",
+   "goos": "darwin",
+   "goarch": "arm64",
+   "family": "macho",
+   "abi": "macos",
+   "runs_on": "macos-14",
+   "container": null,
+   "meaning": "Mach-O importing only the dyld shared cache; host tool for cross-building iOS products"
+  },
+  "macos-universal": {
+   "os": "macos",
+   "arch": "universal",
+   "goos": "darwin",
+   "goarch": "universal",
+   "family": "macho",
+   "abi": "macos",
+   "runs_on": "macos-14",
+   "container": null,
+   "fat": [
+    "arm64",
+    "x86_64"
+   ],
+   "meaning": "fat Mach-O (arm64 + x86_64): one download for Apple Silicon and Intel, both slices carrying native payloads"
+  },
+  "macos-x86_64": {
+   "os": "macos",
+   "arch": "x86_64",
+   "goos": "darwin",
+   "goarch": "amd64",
+   "family": "macho",
+   "abi": "macos",
+   "runs_on": "macos-13",
+   "container": null,
+   "meaning": "Intel Mac slice; lipo'd with arm64 into macos-universal"
+  },
+  "windows-386": {
+   "os": "windows",
+   "arch": "386",
+   "goos": "windows",
+   "goarch": "386",
+   "family": "pe",
+   "abi": "mingw-w64",
+   "runs_on": "windows-2022",
+   "container": null,
+   "meaning": "32-bit PE for legacy Windows; still useful for 32-bit-only toolchains"
+  },
+  "windows-arm64": {
+   "os": "windows",
+   "arch": "arm64",
+   "goos": "windows",
+   "goarch": "arm64",
+   "family": "pe",
+   "abi": "mingw-w64",
+   "runs_on": "windows-2022",
+   "container": null,
+   "meaning": "native PE32+ for Windows on ARM; the x86_64 carrier runs there under emulation and prefers this payload"
+  },
+  "windows-universal": {
+   "os": "windows",
+   "arch": "universal",
+   "goos": "windows",
+   "goarch": "amd64",
+   "family": "pe",
+   "abi": "mingw-w64",
+   "runs_on": "windows-2022",
+   "container": null,
+   "fat": [
+    "x86_64",
+    "arm64"
+   ],
+   "meaning": "one PE carrier (x86_64) that carries the arm64 payload too and picks it on ARM64 Windows"
+  },
+  "windows-x86_64": {
+   "os": "windows",
+   "arch": "x86_64",
+   "goos": "windows",
+   "goarch": "amd64",
+   "family": "pe",
+   "abi": "mingw-w64",
+   "runs_on": "windows-2022",
+   "container": null,
+   "meaning": "PE32+ with no non-system import beyond kernel32/msvcrt: static CRT (/MT), no vcruntime redistributable"
+  }
+ },
+ "tools": [
+  {
+   "id": "busybox",
+   "name": "BusyBox",
+   "version": "1.37.0",
+   "license": "GPL-2.0-only",
+   "method": "source",
+   "upstream": "https://busybox.net/downloads/",
+   "provides": [
+    "sh",
+    "ash",
+    "sed",
+    "grep",
+    "awk",
+    "find",
+    "cp",
+    "mv",
+    "rm",
+    "ls",
+    "ln",
+    "chmod",
+    "dd",
+    "md5sum",
+    "sha256sum",
+    "gzip",
+    "bzip2",
+    "wget",
+    "vi",
+    "less",
+    "head",
+    "tail",
+    "sort",
+    "uniq",
+    "xargs"
+   ],
+   "targets": {
     "linux-arm64": {
-      "family": "elf",
-      "abi": "musl",
-      "meaning": "fully static ELF; runs on any aarch64 Linux kernel, including the iOS sandbox guest",
-      "runs_on": "ubuntu-24.04-arm"
-    },
-    "linux-x86_64": {
-      "family": "elf",
-      "abi": "musl",
-      "meaning": "fully static ELF for CI hosts and desktop Linux",
-      "runs_on": "ubuntu-24.04"
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/busybox",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "busybox | head -1",
+     "notes": "One file, 400 applets, invoked by argv[0] or by symlink farm; recipes use it as the base layer for shells and coreutils."
     },
     "ios-arm64": {
-      "family": "macho",
-      "abi": "iphoneos",
-      "meaning": "Mach-O for the iOS sandbox: links nothing but the dyld-shared cache libraries (libSystem, libc++, Foundation, libobjc)",
-      "runs_on": "macos-14"
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/busybox",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "busybox | head -1"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
     },
     "macos-arm64": {
-      "family": "macho",
-      "abi": "macos",
-      "meaning": "Mach-O host tool, used to cross-compile iOS products on a Mac",
-      "runs_on": "macos-14"
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/busybox.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     }
+   }
   },
-  "tiers": {
-    "static": "one ELF, zero DT_NEEDED, ldd says 'not a dynamic executable'",
-    "sfx": "static stub + zstd payload carrying a tree (compiler resource dir, stdlib, JRE)",
-    "layer": "sfx whose payload splits shared runtime trees into hash-addressed layers reused across bundles",
-    "macho": "one Mach-O (+ optional sfx payload of headers/SDK) that imports only OS-shipped dylibs"
-  },
-  "tools": [
-    {
-      "id": "llvm",
-      "name": "Clang / LLVM",
-      "version": "20.1.8",
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "method": "source",
-      "upstream": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-20.1.8",
-      "provides": [
-        "clang",
-        "clang++",
-        "clang-cpp",
-        "ld.lld",
-        "lld",
-        "llvm-ar",
-        "llvm-ranlib",
-        "llvm-nm",
-        "llvm-strip",
-        "llvm-objcopy",
-        "llvm-objdump",
-        "llvm-readelf",
-        "llvm-size",
-        "llvm-profdata",
-        "llvm-install-name-tool",
-        "llvm-otool",
-        "llvm-lipo",
-        "clang-format"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "ga",
-          "entry": "bin/clang",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 450,
-          "smoke": "clang --version && printf 'int main(void){return 0;}\\n' > /tmp/t.c && clang -static -o /tmp/t /tmp/t.c && /tmp/t && ld.lld --version",
-          "notes": "clang, clang++ and lld link the static libLLVM/libclang archives (CLANG_LINK_CLANG_DYLIB=OFF, LLVM_BUILD_LLVM_DYLIB=OFF), so every shipped tool is a zero-DT_NEEDED ELF. clang-tools-extra (clangd, clang-tidy) is a separate build: SB_LLVM_EXTRA=1. The lib/clang resource dir ships as a layer, so a project that carries clang also carries its builtin headers once.",
-          "timeout": 360
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/clang",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 260,
-          "smoke": "clang --version",
-          "notes": "Built against the iPhoneOS SDK with LIBCXX_ENABLE_STATIC=ON and CLANG_LINK_CLANG_DYLIB=OFF. Headers and .tbd stubs for compiling *for* iOS are Apple-licensed and are NOT shipped; the bundle compiles for the running device using the SDK tree supplied by the host app, exactly the a-Shell model."
-        },
-        "macos-arm64": {
-          "tier": "sfx",
-          "status": "ga",
-          "entry": "bin/clang",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 240,
-          "smoke": "clang --version"
-        }
-      }
+  {
+   "id": "ccache",
+   "name": "ccache",
+   "version": "4.10.2",
+   "license": "GPL-3.0-or-later",
+   "method": "source",
+   "upstream": "https://github.com/ccache/ccache/releases/tag/v4.10.2",
+   "provides": [
+    "ccache"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "experimental",
+     "entry": "bin/ccache",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "ccache --version | head -1",
+     "notes": "Built with -DREDIS_STORAGE_BACKEND=OFF -DENABLE_DOCS=OFF and static libcrypto; the manifest needs zstd+hiredis for full feature set."
     },
-    {
-      "id": "swift",
-      "name": "Swift toolchain",
-      "version": "6.0.3",
-      "license": "Apache-2.0",
-      "method": "prebuilt",
-      "upstream": "https://download.swift.org/swift-6.0.3-release/",
-      "provides": [
-        "swift",
-        "swiftc",
-        "swift-build",
-        "swift-package",
-        "swift-format",
-        "sourcekit-lsp",
-        "swift-frontend"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "experimental",
-          "entry": "bin/swiftc",
-          "paths": [
-            "bin",
-            "usr/bin"
-          ],
-          "size_budget_mb": 900,
-          "smoke": "swiftc --version && swift --version",
-          "notes": "Upstream aarch64 Linux toolchain (glibc 2.35, ubuntu22.04 build) plus the Static Linux SDK, installed as lib/swift/static-linux. The glibc dependence is why this target builds in ubuntu while everything else builds in alpine. swiftc itself links libLLVM and libswiftCore dynamically \u2014 no static swiftc exists \u2014 but `swiftc -static-stdlib -swift-sdk aarch64-musl` emits binaries with zero DT_NEEDED, which is what the SDK in this bundle is for.",
-          "image": "ubuntu:22.04",
-          "timeout": 180
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "There is no aarch64-apple-ios *host* port of swiftc; Swift is a cross compiler only. iOS ships libswift*.dylib in /usr/lib/swift but that is a runtime, not a compiler. Use the macos-arm64 bundle."
-        }
-      }
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/ccache",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "ccache --version | head -1"
     },
-    {
-      "id": "theos",
-      "name": "Theos",
-      "version": "2024.11",
-      "license": "BSD-3-Clause",
-      "method": "source",
-      "upstream": "https://github.com/theos/theos",
-      "provides": [
-        "theos",
-        "logos.pl",
-        "nic.pl",
-        "makefiles",
-        "libsubstrate",
-        "libellekit",
-        "orion"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "experimental",
-          "entry": "bin/theos",
-          "paths": [
-            "bin",
-            "toolchain/bin"
-          ],
-          "require": [
-            "clang",
-            "make",
-            "ldid",
-            "dpkg-deb"
-          ],
-          "size_budget_mb": 60,
-          "smoke": "theos --version && theos --path",
-          "notes": "Ships $THEOS (makefiles, include, lib, templates), the Logos preprocessor, and the arm64 wrapper scripts. The Darwin SDK and a clang that can target arm64-apple-ios are `require`d, not bundled: Apple's SDK is not redistributable."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/theos",
-          "paths": [
-            "bin",
-            "toolchain/bin"
-          ],
-          "require": [
-            "clang",
-            "make",
-            "ldid"
-          ],
-          "size_budget_mb": 60,
-          "smoke": "theos --version",
-          "notes": "On-device Theos (TheosStudio model): makefiles + logos run under the bundle's perl; the SDK comes from the host app's bundled toolchain directory."
-        }
-      }
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     },
-    {
-      "id": "rust",
-      "name": "rustc + cargo",
-      "version": "1.83.0",
-      "license": "MIT OR Apache-2.0",
-      "method": "prebuilt",
-      "upstream": "https://static.rust-lang.org/dist/",
-      "provides": [
-        "rustc",
-        "cargo",
-        "rustdoc",
-        "rustfmt",
-        "clippy-driver",
-        "rust-std"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "ga",
-          "entry": "bin/cargo",
-          "paths": [
-            "bin",
-            "lib"
-          ],
-          "size_budget_mb": 420,
-          "smoke": "rustc --version && cargo --version",
-          "notes": "Upstream aarch64-unknown-linux-musl host toolchain. rust-std for aarch64-unknown-linux-musl is included; aarch64-apple-ios std is added by the recipe (rust-std-aarch64-apple-ios) so the same bundle cross-compiles iOS staticlibs."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "rustc has no aarch64-apple-ios host port (no host std). Cross toolchain ships in the linux-arm64 and macos-arm64 bundles with the aarch64-apple-ios target installed."
-        }
-      }
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "go",
-      "name": "Go toolchain",
-      "version": "1.23.4",
-      "license": "BSD-3-Clause",
-      "method": "source",
-      "upstream": "https://go.dev/dl/",
-      "provides": [
-        "go",
-        "gofmt",
-        "goimports",
-        "compile",
-        "link"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "ga",
-          "entry": "bin/go",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 260,
-          "smoke": "go version && GOROOT=$SB_BUNDLE_ROOT/go go run /dev/stdin <<< 'package main; func main(){}'",
-          "notes": "Built from source with CGO_ENABLED=0 and GOROOT inside the bundle (sets GOROOT via meta env). GOOS=ios / GOARCH=arm64 works out of the box: cross-compiling iOS apps from the phone is the point."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "GOOS=ios is a target, never a host. Go driver does not build for Darwin/arm64+ios host."
-        }
-      }
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "zig",
-      "name": "Zig",
-      "version": "0.14.0",
-      "license": "MIT",
-      "method": "prebuilt",
-      "upstream": "https://ziglang.org/download/",
-      "provides": [
-        "zig",
-        "zig cc",
-        "zig c++",
-        "zig ar"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "ga",
-          "entry": "bin/zig",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 200,
-          "smoke": "zig version",
-          "notes": "Upstream aarch64-linux tarball. Doubles as a libc provider (`zig cc -target aarch64-ios`) and as a linker for the other recipes."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "No ios host in Zig's supported host list (linux, macos, windows, freebsd, netbsd, openbsd, dragonfly, haiku, serenity)."
-        }
-      }
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "python",
-      "name": "CPython",
-      "version": "3.12.7",
-      "license": "PSF-2.0",
-      "method": "source",
-      "upstream": "https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tgz",
-      "provides": [
-        "python3",
-        "pip",
-        "venv",
-        "ensurepip"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "sfx",
-          "status": "ga",
-          "entry": "bin/python3",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 90,
-          "smoke": "python3 -c 'import ssl,sqlite3,zlib,hashlib,ctypes;print(\"ok\")'",
-          "notes": "Statically linked interpreter. Modules/Setup.local contains `*static*`, which links every extension module (ssl, sqlite3, zlib, bz2, lzma, ctypes) into the binary instead of emitting lib-dynload/*.so \u2014 a static ELF cannot dlopen, so that one line is the difference between a working python and one that dies on `import ssl`."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/python3",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 120,
-          "smoke": "python3 -c 'print(1+1)'",
-          "notes": "Same recipe against the iPhoneOS SDK (CPython's Darwin configure path with --with-lto). No fork(), no subprocess without posix_spawn; sys.executable is the bundle entry. This is the Python-Apple-support model without the Xcode project part."
-        }
-      }
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "node",
-      "name": "Node.js (jitless)",
-      "version": "22.11.0",
-      "license": "MIT",
-      "method": "prebuilt",
-      "upstream": "https://nodejs.org/dist/",
-      "provides": [
-        "node",
-        "npm",
-        "npx",
-        "node-gyp"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "ga",
-          "entry": "bin/node",
-          "paths": [
-            "bin",
-            "lib/node_modules"
-          ],
-          "size_budget_mb": 160,
-          "smoke": "node -e 'require(\"fs\").writeSync(1, JSON.stringify(process.versions)+\"\\n\")'",
-          "notes": "Upstream linux-arm64 tarball is glibc; the bundle declares ubuntu as its image and does not pretend to be musl. npm and npx are wrappers that call the bundled node explicitly, reachable as `node --sb-run npm` or through a symlink named npm.",
-          "image": "ubuntu:24.04"
-        },
-        "ios-arm64": {
-          "tier": "sfx",
-          "status": "experimental",
-          "entry": "bin/node",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 90,
-          "smoke": "node -e 'console.log(1+1)'",
-          "notes": "Built from nodejs-mobile sources with V8 in jitless mode: iOS forbids W^X executable memory, so a stock node aborts on first JS execution. No worker_threads, no vm.Script caching to disk."
-        }
-      }
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "typescript",
-      "name": "TypeScript compiler",
-      "version": "5.7.2",
-      "license": "Apache-2.0",
-      "method": "repack",
-      "upstream": "https://registry.npmjs.org/typescript/-/typescript-5.7.2.tgz",
-      "provides": [
-        "tsc",
-        "tsserver"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "sfx",
-          "status": "ga",
-          "entry": "bin/tsc",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 170,
-          "smoke": "tsc --version",
-          "notes": "Node single-executable application: typescript's tsc (esbuild-bundled, because SEA embeds one file) injected into a node binary with postject. The artifact is tsc + tsserver + a 200-byte meta.json, packed as one file. No node on PATH at run time.",
-          "image": "ubuntu:24.04"
-        },
-        "ios-arm64": {
-          "tier": "sfx",
-          "status": "experimental",
-          "entry": "bin/tsc",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 60,
-          "smoke": "tsc --version",
-          "notes": "SEA against the jitless node from tools[node]. Requires the node bundle at build time."
-        }
-      }
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "java",
-      "name": "OpenJDK (jlink runtime)",
-      "version": "21.0.5",
-      "license": "GPL-2.0 WITH Classpath-exception-2.0",
-      "method": "prebuilt",
-      "upstream": "https://adoptium.net/temurin/releases/",
-      "provides": [
-        "java",
-        "javac",
-        "jar",
-        "jlink",
-        "jshell",
-        "keytool"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "experimental",
-          "entry": "bin/javac",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 260,
-          "smoke": "java -version && javac -version",
-          "notes": "Temurin aarch64 + jlink'd module set (java.compiler, jdk.compiler, jdk.jdeps, jdk.zipfs). The VM dlopens libjvm/libnio, so the bundle is an sfx, never a static file.",
-          "image": "ubuntu:24.04",
-          "timeout": 90
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "No iOS port of HotSpot. Zero/Zero requires a native launcher, JIT and threads that the iOS sandbox does not give a stock build. Kotlin/JVM inherits this."
-        }
-      }
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     },
-    {
-      "id": "kotlin",
-      "name": "Kotlin compiler",
-      "version": "2.1.0",
-      "license": "Apache-2.0",
-      "method": "prebuilt",
-      "upstream": "https://github.com/JetBrains/kotlin/releases/tag/v2.1.0",
-      "provides": [
-        "kotlinc",
-        "kotlinc-jvm",
-        "kotlinc-native"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "layer",
-          "status": "experimental",
-          "entry": "bin/kotlinc",
-          "paths": [
-            "bin"
-          ],
-          "require": [],
-          "size_budget_mb": 120,
-          "smoke": "kotlinc -version",
-          "notes": "kotlinc is a JVM program. The bundle builds its own jlink runtime from the same recipes/_jre.sh path java.sh uses, so the jre layer hash is identical and java + kotlin + gradle share one JRE on disk. No host java is required.",
-          "image": "ubuntu:24.04",
-          "timeout": 120
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "kotlinc-jvm needs a JVM host; kotlin-native apple targets need a macOS host. Neither exists on iOS."
-        }
-      }
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     },
-    {
-      "id": "cmake",
-      "name": "CMake",
-      "version": "3.31.0",
-      "license": "BSD-3-Clause",
-      "method": "source",
-      "upstream": "https://github.com/Kitware/CMake/releases/tag/v3.31.0",
-      "provides": [
-        "cmake",
-        "ctest",
-        "cpack"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/cmake",
-          "paths": [
-            "bin",
-            "share/cmake-3.31"
-          ],
-          "size_budget_mb": 90,
-          "smoke": "cmake --version",
-          "notes": "Bootstrap without openssl/curl (CMake_BUILD_WITH_SSL=OFF, no system libs); modules live in share/ carried in the same payload."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/cmake",
-          "paths": [
-            "bin",
-            "share/cmake-3.31"
-          ],
-          "size_budget_mb": 90,
-          "smoke": "cmake --version",
-          "notes": "Fork/exec on iOS is posix_spawn-only; cmake's generator runs `make`/`ninja` from PATH, which the bundle puts in front."
-        }
-      }
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     },
-    {
-      "id": "ninja",
-      "name": "Ninja",
-      "version": "1.12.1",
-      "license": "Apache-2.0",
-      "method": "source",
-      "upstream": "https://github.com/ninja-build/ninja/releases/tag/v1.12.1",
-      "provides": [
-        "ninja",
-        "samu"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/ninja",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 12,
-          "smoke": "ninja --version"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/ninja",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 12,
-          "smoke": "ninja --version"
-        }
-      }
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     },
-    {
-      "id": "make",
-      "name": "GNU make",
-      "version": "4.4.1",
-      "license": "GPL-3.0-or-later",
-      "method": "source",
-      "upstream": "https://ftp.gnu.org/gnu/make/",
-      "provides": [
-        "make",
-        "gmake"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/make",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 8,
-          "smoke": "make --version"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/make",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 8,
-          "smoke": "make --version",
-          "notes": "Same source; the Theos makefiles need GNU make, not BSD make."
-        }
-      }
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ccache.sh yet"
     },
-    {
-      "id": "meson",
-      "name": "Meson + samu",
-      "version": "1.6.0",
-      "license": "Apache-2.0",
-      "method": "repack",
-      "upstream": "https://pypi.org/project/meson/",
-      "provides": [
-        "meson",
-        "mesonbuild"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "sfx",
-          "status": "ga",
-          "entry": "bin/meson",
-          "paths": [
-            "bin"
-          ],
-          "require": [],
-          "size_budget_mb": 60,
-          "smoke": "meson --version",
-          "notes": "Meson on top of the static CPython from recipes/_python.sh: the artifact is the interpreter, the stdlib layer and mesonbuild, with a `meson` wrapper. `meson --version` works with no python3 on PATH."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/meson",
-          "paths": [
-            "bin"
-          ],
-          "require": [
-            "python3"
-          ],
-          "size_budget_mb": 20,
-          "smoke": "meson --version"
-        }
-      }
-    },
-    {
-      "id": "dpkg",
-      "name": "dpkg tooling",
-      "version": "1.22.22",
-      "license": "GPL-2.0-or-later",
-      "method": "source",
-      "upstream": "https://deb.debian.org/debian/pool/main/d/dpkg/",
-      "provides": [
-        "dpkg-deb",
-        "dpkg-split",
-        "dpkg-query",
-        "dpkg",
-        "dpkg-architecture",
-        "dpkg-gencontrol"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/dpkg-deb",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 20,
-          "smoke": "dpkg-deb --version",
-          "notes": "Built for .deb production, not installation: --build/--info/--contents/--extract plus dpkg-split. The maintainer scripts that need a root dpkg database are out of scope and documented in docs/caveats.md."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/dpkg-deb",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 20,
-          "smoke": "dpkg-deb --version",
-          "notes": "Same reduced toolset; xz and zstd are linked statically, so `dpkg-deb -Zxz --build` works with no external filters."
-        }
-      }
-    },
-    {
-      "id": "ldid",
-      "name": "ldid (code signer)",
-      "version": "2.1.5",
-      "license": "AGPL-3.0",
-      "method": "source",
-      "upstream": "https://github.com/ProcursusTeam/ldid",
-      "provides": [
-        "ldid",
-        "ldid2",
-        "plistutil"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/ldid",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 12,
-          "smoke": "ldid 2>&1 | head -2",
-          "notes": "Procursus ldid with libcrypto/libplist statically linked; signs Mach-O for jailbroken and developer-mode devices. iOS arm64 build is the same tree."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/ldid",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 12,
-          "smoke": "ldid 2>&1 | head -2"
-        }
-      }
-    },
-    {
-      "id": "xtool",
-      "name": "xtool",
-      "version": "1.14",
-      "license": "MIT",
-      "method": "prebuilt",
-      "upstream": "https://github.com/xtool-org/xtool",
-      "provides": [
-        "xtool",
-        "xtool-lldb"
-      ],
-      "targets": {
-        "macos-arm64": {
-          "tier": "sfx",
-          "status": "experimental",
-          "entry": "bin/xtool",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 120,
-          "smoke": "xtool --version",
-          "notes": "SwiftPM-based iOS app builder for Linux/macOS hosts; needs the Darwin Swift SDK at run time (xtool setup downloads it, the recipe can bake it in with --bake-sdk)."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "not-supported",
-          "entry": "",
-          "notes": "xtool drives xcodebuild-equivalents and links Mach-O on a desktop host; it has no iOS host support."
-        }
-      }
-    },
-    {
-      "id": "zstd",
-      "name": "zstd",
-      "version": "1.5.6",
-      "license": "BSD-3-Clause OR GPL-2.0",
-      "method": "source",
-      "upstream": "https://github.com/facebook/zstd/releases/tag/v1.5.6",
-      "provides": [
-        "zstd",
-        "zstdcat",
-        "unzstd"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/zstd",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "zstd --version"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/zstd",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "zstd --version"
-        }
-      }
-    },
-    {
-      "id": "xz",
-      "name": "XZ Utils",
-      "version": "5.6.3",
-      "license": "0BSD AND LGPL-2.1-or-later AND GPL-2.0-or-later",
-      "method": "source",
-      "upstream": "https://github.com/tukaani-project/xz/releases/tag/v5.6.3",
-      "provides": [
-        "xz",
-        "unxz",
-        "xzcat",
-        "lzma"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/xz",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "xz --version"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/xz",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "xz --version"
-        }
-      }
-    },
-    {
-      "id": "tar",
-      "name": "bsdtar (libarchive)",
-      "version": "3.7.7",
-      "license": "BSD-2-Clause",
-      "method": "source",
-      "upstream": "https://github.com/libarchive/libarchive/releases/tag/v3.7.7",
-      "provides": [
-        "tar",
-        "bsdtar",
-        "cpio",
-        "unzip"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/tar",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 8,
-          "smoke": "tar --version"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/tar",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 8,
-          "smoke": "tar --version",
-          "notes": "bsdtar, not GNU tar: Apple's xattrs/ACL handling and no gnulib."
-        }
-      }
-    },
-    {
-      "id": "curl",
-      "name": "curl",
-      "version": "8.11.1",
-      "license": "curl",
-      "method": "source",
-      "upstream": "https://curl.se/download/",
-      "provides": [
-        "curl"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/curl",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 14,
-          "smoke": "curl --version | head -1",
-          "notes": "Static musl + static openssl; no NSS, no LDAP, no GSSAPI."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/curl",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 14,
-          "smoke": "curl --version | head -1",
-          "notes": "HTTPS via Secure Transport instead of OpenSSL (smaller, Apple-supported); static openssl variant available with -DBUILD_OPENSSL=1."
-        }
-      }
-    },
-    {
-      "id": "git",
-      "name": "git",
-      "version": "2.47.1",
-      "license": "GPL-2.0-only",
-      "method": "source",
-      "upstream": "https://github.com/git/git/releases/tag/v2.47.1",
-      "provides": [
-        "git",
-        "git-remote-https"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "sfx",
-          "status": "experimental",
-          "entry": "bin/git",
-          "paths": [
-            "bin",
-            "libexec/git-core"
-          ],
-          "size_budget_mb": 60,
-          "smoke": "git --version",
-          "notes": "NO_GETTEXT, NO_TCLTK, NO_PERL; the git-core helper programs stay in the payload. Missing: git-svn, git-gui, documentation."
-        },
-        "ios-arm64": {
-          "tier": "sfx",
-          "status": "experimental",
-          "entry": "bin/git",
-          "paths": [
-            "bin",
-            "libexec/git-core"
-          ],
-          "size_budget_mb": 60,
-          "smoke": "git --version",
-          "notes": "posix_spawn wrapper needed for the git-core helpers; the recipe builds a --with-shell=sh variant and points GIT_EXEC_PATH into the bundle."
-        }
-      }
-    },
-    {
-      "id": "jq",
-      "name": "jq",
-      "version": "1.7.1",
-      "license": "MIT",
-      "method": "source",
-      "upstream": "https://github.com/jqlang/jq/releases/tag/jq-1.7.1",
-      "provides": [
-        "jq"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/jq",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "echo '{\"a\":1}' | jq -c .a"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/jq",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "echo '{\"a\":1}' | jq -c .a"
-        }
-      }
-    },
-    {
-      "id": "ripgrep",
-      "name": "ripgrep",
-      "version": "14.1.1",
-      "license": "MIT OR Unlicense",
-      "method": "source",
-      "upstream": "https://github.com/BurntSushi/ripgrep/releases/tag/14.1.1",
-      "provides": [
-        "rg"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/rg",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "rg --version | head -1"
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/rg",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "rg --version | head -1"
-        }
-      }
-    },
-    {
-      "id": "openssl",
-      "name": "OpenSSL CLI",
-      "version": "3.4.0",
-      "license": "Apache-2.0",
-      "method": "source",
-      "upstream": "https://github.com/openssl/openssl/releases/tag/openssl-3.4.0",
-      "provides": [
-        "openssl"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/openssl",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 10,
-          "smoke": "openssl version",
-          "notes": "no-shared no-module no-legacy: everything in one binary, so `openssl x509` does not hunt for providers."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/openssl",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 10,
-          "smoke": "openssl version"
-        }
-      }
-    },
-    {
-      "id": "patchelf",
-      "name": "patchelf",
-      "version": "0.18.0",
-      "license": "GPL-3.0-or-later",
-      "method": "source",
-      "upstream": "https://github.com/NixOS/patchelf/releases/tag/0.18.0",
-      "provides": [
-        "patchelf"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/patchelf",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "patchelf --version"
-        }
-      }
-    },
-    {
-      "id": "fakeroot",
-      "name": "fakeroot",
-      "version": "1.36.2",
-      "license": "GPL-3.0-or-later",
-      "method": "source",
-      "upstream": "https://salsa.debian.org/cli/fakeroot",
-      "provides": [
-        "fakeroot",
-        "faked",
-        "fakeroot-tcp"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/fakeroot",
-          "paths": [
-            "bin",
-            "lib/fakeroot"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "fakeroot --version",
-          "notes": "faked must be the same architecture; it is carried in the payload and located via FAKEROOTDONTTRYCHOWN-independent path in meta env."
-        }
-      }
-    },
-    {
-      "id": "ccache",
-      "name": "ccache",
-      "version": "4.10.2",
-      "license": "GPL-3.0-or-later",
-      "method": "source",
-      "upstream": "https://github.com/ccache/ccache/releases/tag/v4.10.2",
-      "provides": [
-        "ccache"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "experimental",
-          "entry": "bin/ccache",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "ccache --version | head -1",
-          "notes": "Built with -DREDIS_STORAGE_BACKEND=OFF -DENABLE_DOCS=OFF and static libcrypto; the manifest needs zstd+hiredis for full feature set."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/ccache",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 6,
-          "smoke": "ccache --version | head -1"
-        }
-      }
-    },
-    {
-      "id": "protobuf",
-      "name": "protoc",
-      "version": "29.2",
-      "license": "BSD-3-Clause",
-      "method": "source",
-      "upstream": "https://github.com/protocolbuffers/protobuf/releases/tag/v29.2",
-      "provides": [
-        "protoc"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "experimental",
-          "entry": "bin/protoc",
-          "paths": [
-            "bin",
-            "include"
-          ],
-          "size_budget_mb": 20,
-          "smoke": "protoc --version",
-          "notes": "Needs abseil + utf8_range as static libs; well-known types ship in include/."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "experimental",
-          "entry": "bin/protoc",
-          "paths": [
-            "bin",
-            "include"
-          ],
-          "size_budget_mb": 20,
-          "smoke": "protoc --version"
-        }
-      }
-    },
-    {
-      "id": "busybox",
-      "name": "BusyBox",
-      "version": "1.37.0",
-      "license": "GPL-2.0-only",
-      "method": "source",
-      "upstream": "https://busybox.net/downloads/",
-      "provides": [
-        "sh",
-        "ash",
-        "sed",
-        "grep",
-        "awk",
-        "find",
-        "cp",
-        "mv",
-        "rm",
-        "ls",
-        "ln",
-        "chmod",
-        "dd",
-        "md5sum",
-        "sha256sum",
-        "gzip",
-        "bzip2",
-        "wget",
-        "vi",
-        "less",
-        "head",
-        "tail",
-        "sort",
-        "uniq",
-        "xargs"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/busybox",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "busybox | head -1",
-          "notes": "One file, 400 applets, invoked by argv[0] or by symlink farm; recipes use it as the base layer for shells and coreutils."
-        },
-        "ios-arm64": {
-          "tier": "macho",
-          "status": "ga",
-          "entry": "bin/busybox",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "busybox | head -1"
-        }
-      }
-    },
-    {
-      "id": "qemu",
-      "name": "qemu-user-static",
-      "version": "9.2.0",
-      "license": "GPL-2.0-only",
-      "method": "source",
-      "upstream": "https://gitlab.com/qemu-project/qemu",
-      "provides": [
-        "qemu-aarch64",
-        "qemu-arm",
-        "qemu-i386",
-        "qemu-x86_64",
-        "qemu-riscv64"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "experimental",
-          "entry": "bin/qemu-x86_64",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 90,
-          "smoke": "qemu-x86_64 --version",
-          "notes": "One binary per guest arch, all static; the reason a phone can run x86_64 CI artifacts."
-        }
-      }
-    },
-    {
-      "id": "proot",
-      "name": "proot",
-      "version": "5.4.0",
-      "license": "GPL-2.0-or-later",
-      "method": "source",
-      "upstream": "https://github.com/termux/proot",
-      "provides": [
-        "proot",
-        "proot-distro"
-      ],
-      "targets": {
-        "linux-arm64": {
-          "tier": "static",
-          "status": "ga",
-          "entry": "bin/proot",
-          "paths": [
-            "bin"
-          ],
-          "size_budget_mb": 4,
-          "smoke": "proot --version",
-          "notes": "ptrace-based chroot-less rootfs; requires the kernel to allow ptrace on the app process (allowed on iOS for self-tracing)."
-        }
-      }
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
     }
-  ]
+   }
+  },
+  {
+   "id": "cmake",
+   "name": "CMake",
+   "version": "3.31.0",
+   "license": "BSD-3-Clause",
+   "method": "source",
+   "upstream": "https://github.com/Kitware/CMake/releases/tag/v3.31.0",
+   "provides": [
+    "cmake",
+    "ctest",
+    "cpack"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/cmake",
+     "paths": [
+      "bin",
+      "share/cmake-3.31"
+     ],
+     "size_budget_mb": 90,
+     "smoke": "cmake --version",
+     "notes": "Bootstrap without openssl/curl (CMake_BUILD_WITH_SSL=OFF, no system libs); modules live in share/ carried in the same payload."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/cmake",
+     "paths": [
+      "bin",
+      "share/cmake-3.31"
+     ],
+     "size_budget_mb": 90,
+     "smoke": "cmake --version",
+     "notes": "Fork/exec on iOS is posix_spawn-only; cmake's generator runs `make`/`ninja` from PATH, which the bundle puts in front."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/cmake.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "curl",
+   "name": "curl",
+   "version": "8.11.1",
+   "license": "curl",
+   "method": "source",
+   "upstream": "https://curl.se/download/",
+   "provides": [
+    "curl"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/curl",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 14,
+     "smoke": "curl --version | head -1",
+     "notes": "Static musl + static openssl; no NSS, no LDAP, no GSSAPI."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/curl",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 14,
+     "smoke": "curl --version | head -1",
+     "notes": "HTTPS via Secure Transport instead of OpenSSL (smaller, Apple-supported); static openssl variant available with -DBUILD_OPENSSL=1."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/curl.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "dpkg",
+   "name": "dpkg tooling",
+   "version": "1.22.22",
+   "license": "GPL-2.0-or-later",
+   "method": "source",
+   "upstream": "https://deb.debian.org/debian/pool/main/d/dpkg/",
+   "provides": [
+    "dpkg-deb",
+    "dpkg-split",
+    "dpkg-query",
+    "dpkg",
+    "dpkg-architecture",
+    "dpkg-gencontrol"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/dpkg-deb",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 20,
+     "smoke": "dpkg-deb --version",
+     "notes": "Built for .deb production, not installation: --build/--info/--contents/--extract plus dpkg-split. The maintainer scripts that need a root dpkg database are out of scope and documented in docs/caveats.md."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/dpkg-deb",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 20,
+     "smoke": "dpkg-deb --version",
+     "notes": "Same reduced toolset; xz and zstd are linked statically, so `dpkg-deb -Zxz --build` works with no external filters."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/dpkg.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "fakeroot",
+   "name": "fakeroot",
+   "version": "1.36.2",
+   "license": "GPL-3.0-or-later",
+   "method": "source",
+   "upstream": "https://salsa.debian.org/cli/fakeroot",
+   "provides": [
+    "fakeroot",
+    "faked",
+    "fakeroot-tcp"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/fakeroot",
+     "paths": [
+      "bin",
+      "lib/fakeroot"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "fakeroot --version",
+     "notes": "faked must be the same architecture; it is carried in the payload and located via FAKEROOTDONTTRYCHOWN-independent path in meta env."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/fakeroot.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "git",
+   "name": "git",
+   "version": "2.47.1",
+   "license": "GPL-2.0-only",
+   "method": "source",
+   "upstream": "https://github.com/git/git/releases/tag/v2.47.1",
+   "provides": [
+    "git",
+    "git-remote-https"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "sfx",
+     "status": "experimental",
+     "entry": "bin/git",
+     "paths": [
+      "bin",
+      "libexec/git-core"
+     ],
+     "size_budget_mb": 60,
+     "smoke": "git --version",
+     "notes": "NO_GETTEXT, NO_TCLTK, NO_PERL; the git-core helper programs stay in the payload. Missing: git-svn, git-gui, documentation."
+    },
+    "ios-arm64": {
+     "tier": "sfx",
+     "status": "experimental",
+     "entry": "bin/git",
+     "paths": [
+      "bin",
+      "libexec/git-core"
+     ],
+     "size_budget_mb": 60,
+     "smoke": "git --version",
+     "notes": "posix_spawn wrapper needed for the git-core helpers; the recipe builds a --with-shell=sh variant and points GIT_EXEC_PATH into the bundle."
+    },
+    "linux-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/git.sh yet"
+    },
+    "linux-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "go",
+   "name": "Go",
+   "version": "1.23.9",
+   "license": "BSD-3-Clause",
+   "method": "release",
+   "upstream": "https://go.dev/dl/",
+   "provides": [
+    "go",
+    "gofmt",
+    "goimports"
+   ],
+   "source": "go1.23.9",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "official tarball; CGO_ENABLED=0 output is statically linked by construction, and GOROOT ships as a layer shared with every other Go-carrying bundle",
+     "size_budget_mb": 260,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same, aarch64 tarball",
+     "size_budget_mb": 250,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "linux-armv6l tarball covers armv6/armv7 boards; GOARM selects the instruction set at compile time",
+     "size_budget_mb": 240,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "linux-386 tarball",
+     "size_budget_mb": 240,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "linux-riscv64 tarball (first class since 1.21)",
+     "size_budget_mb": 250,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "windows-amd64 zip; binaries are PE32+ linking only kernel32/msvcrt (static CRT); no Visual C++ redistributable, no vcruntime140.dll beside the binary with CGO_ENABLED=0, and GOROOT is the only thing carried",
+     "size_budget_mb": 260,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "windows-arm64 zip, native",
+     "size_budget_mb": 250,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "windows-386 zip; 32-bit Go still builds and runs on 64-bit Windows",
+     "size_budget_mb": 240,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-arm64 tarball",
+     "size_budget_mb": 260,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-amd64 tarball",
+     "size_budget_mb": 260,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "one GOROOT plus two tool slices; `go build` targets iOS with GOOS=ios GOARCH=arm64 and cgo",
+     "size_budget_mb": 340,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "GOOS=ios needs cgo and the iOS SDK; without them only pure-Go packages build, and the resulting binary is app-signed, not standalone",
+     "size_budget_mb": 200,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "same, simulator slice",
+     "size_budget_mb": 200,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. windows-amd64 zip; binaries are PE32+ linking only kernel32/msvcrt (static CRT); no Visual C++ redistributable, no vcruntime140.dll beside the binary with CGO_ENABLED=0, and GOROOT is the only thing carried",
+     "size_budget_mb": 260,
+     "entry": "bin/go",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "java",
+   "name": "OpenJDK (JRE + jlink)",
+   "version": "21.0.5",
+   "license": "GPL-2.0 WITH Classpath-exception-2.0",
+   "method": "release",
+   "upstream": "https://adoptium.net/temurin/releases/",
+   "provides": [
+    "java",
+    "javac",
+    "jar",
+    "jlink",
+    "jshell",
+    "keytool"
+   ],
+   "source": "21.0.5",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "Temurin JDK, jlink'd to a runtime image with the modules a build actually needs; the runtime is a layer so java, kotlin and tooling share one JRE",
+     "size_budget_mb": 200,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "aarch64 JDK",
+     "size_budget_mb": 200,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "planned",
+     "image": "ubuntu:24.04",
+     "notes": "Temurin publishes no current arm32 build to jlink from",
+     "size_budget_mb": 160,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit x86 JDK is published for current releases",
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "experimental",
+     "image": "ubuntu:24.04",
+     "notes": "riscv64 JDK builds exist (Temurin/IBM); JIT support varies",
+     "size_budget_mb": 200,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "Temurin windows-x64 + jlink image",
+     "size_budget_mb": 210,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "jlink emits a runtime for its own host only; needs a windows-arm64 runner",
+     "size_budget_mb": 210,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Windows JDK for current releases",
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Temurin macos-aarch64",
+     "size_budget_mb": 200,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Temurin macos-x64",
+     "size_budget_mb": 200,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "two jlink images sharing one class-data layer",
+     "size_budget_mb": 280,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no JVM port to iOS: JIT is forbidden by the sandbox and no interpreter-only JVM ships for arm64-ios",
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "same: no JVM port to the iOS simulator platform",
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. Temurin windows-x64 + jlink image",
+     "size_budget_mb": 210,
+     "entry": "bin/java",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "jq",
+   "name": "jq",
+   "version": "1.7.1",
+   "license": "MIT",
+   "method": "source",
+   "upstream": "https://github.com/jqlang/jq/releases/tag/jq-1.7.1",
+   "provides": [
+    "jq"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/jq",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "echo '{\"a\":1}' | jq -c .a"
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/jq",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "echo '{\"a\":1}' | jq -c .a"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/jq.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "kotlin",
+   "name": "Kotlin",
+   "version": "2.0.21",
+   "license": "Apache-2.0",
+   "method": "release",
+   "upstream": "https://github.com/JetBrains/kotlin/releases",
+   "provides": [
+    "kotlinc",
+    "kotlin",
+    "kotlinc-jvm",
+    "kapt"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "kotlin-compiler.zip + a java layer; the JRE is not duplicated",
+     "size_budget_mb": 180,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same jar, aarch64 JRE layer",
+     "size_budget_mb": 180,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "needs the arm32 JRE that java cannot build",
+     "size_budget_mb": 150,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit JRE to run the Kotlin compiler",
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "riscv64 JRE layer",
+     "size_budget_mb": 180,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "kotlinc.bat + JRE layer",
+     "size_budget_mb": 190,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "jlink emits a runtime for its own host only",
+     "size_budget_mb": 190,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit JRE",
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-aarch64 JRE layer",
+     "size_budget_mb": 190,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-x64 JRE layer",
+     "size_budget_mb": 190,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "shared jar, two JRE slices",
+     "size_budget_mb": 220,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "JVM-only compiler: no JVM exists on iOS. Kotlin/Native targets iOS from a macos-* host instead",
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "same as ios-arm64",
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. kotlinc.bat + JRE layer",
+     "size_budget_mb": 190,
+     "entry": "bin/kotlinc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "ldid",
+   "name": "ldid (code signer)",
+   "version": "2.1.5",
+   "license": "AGPL-3.0",
+   "method": "source",
+   "upstream": "https://github.com/ProcursusTeam/ldid",
+   "provides": [
+    "ldid",
+    "ldid2",
+    "plistutil"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/ldid",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 12,
+     "smoke": "ldid 2>&1 | head -2",
+     "notes": "Procursus ldid with libcrypto/libplist statically linked; signs Mach-O for jailbroken and developer-mode devices. iOS arm64 build is the same tree."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/ldid",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 12,
+     "smoke": "ldid 2>&1 | head -2"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ldid.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "llvm",
+   "name": "Clang / LLVM",
+   "version": "20.1.8",
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "method": "source",
+   "upstream": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-20.1.8",
+   "provides": [
+    "clang",
+    "clang++",
+    "clang-cpp",
+    "ld.lld",
+    "lld",
+    "llvm-ar",
+    "llvm-ranlib",
+    "llvm-nm",
+    "llvm-strip",
+    "llvm-objcopy",
+    "llvm-objdump",
+    "llvm-readelf",
+    "llvm-size",
+    "llvm-profdata",
+    "llvm-install-name-tool",
+    "llvm-lipo",
+    "clang-format",
+    "clangd",
+    "clang-tidy"
+   ],
+   "source": "llvmorg-20.1.8",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "static libLLVM/libclang archives (LLVM_BUILD_LLVM_DYLIB=OFF, CLANG_LINK_CLANG_DYLIB=OFF) so every tool is a zero-DT_NEEDED ELF; lib/clang/<ver> resource dir ships as a hash-addressed layer shared with every other clang-carrying bundle; clangd/clang-tidy behind SB_LLVM_EXTRA=1",
+     "size_budget_mb": 450,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same recipe, native aarch64; the resource dir layer digest matches the x86_64 build, so a project carrying both stores headers once",
+     "size_budget_mb": 450,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "needs a musleabihf host runner; the recipe builds natively only",
+     "size_budget_mb": 380,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "needs an i686 host; LLVM_BUILD_32_BITS is set but unbuilt here",
+     "size_budget_mb": 380,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "needs a riscv64 runner; unexercised",
+     "size_budget_mb": 420,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the mingw-w64 / clang-cl branch is not written; the approach (static libLLVM + -static, or the MSVC release plus its redistributable) is in docs/targets.md",
+     "size_budget_mb": 900,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the mingw-w64 / clang-cl branch is not written; the approach (static libLLVM + -static, or the MSVC release plus its redistributable) is in docs/targets.md",
+     "size_budget_mb": 900,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "32-bit PE build; LLVM dropped i686 Windows hosts, so this is a cross build producing a 32-bit clang, not a supported host",
+     "size_budget_mb": 800,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Xcode toolchain, or the official LLVM release for darwin-arm64; resource dir is a layer so clang and swiftc share one copy",
+     "size_budget_mb": 1500,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Intel slice of the same tree",
+     "size_budget_mb": 1500,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "lipo of the two slices; the bundle carries both payloads and the stub runs the one matching the host",
+     "size_budget_mb": 2200,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "clang inside the sandbox: needs an SDK layer (-isysroot) and a writable TMPDIR; link only with lld (ld64 needs the toolchain's ld64.lld), and no JIT without a signed entitlement",
+     "size_budget_mb": 600,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "same tree, simulator slice; used for running compile tests in CI",
+     "size_budget_mb": 600,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the mingw-w64 / clang-cl branch is not written; the approach (static libLLVM + -static, or the MSVC release plus its redistributable) is in docs/targets.md",
+     "size_budget_mb": 900,
+     "entry": "bin/clang",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "make",
+   "name": "GNU Make",
+   "version": "4.4.1",
+   "license": "GPL-3.0-or-later",
+   "method": "source",
+   "upstream": "https://ftp.gnu.org/gnu/make/",
+   "provides": [
+    "make",
+    "gmake"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (musleabihf)",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (32-bit x86)",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (riscv64)",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "mingw-w64 build of 4.4.1; a POSIX shell must be on PATH for recipes, which is exactly what a make bundle is for on Windows",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "mingw-w64 aarch64 cross build; unexercised",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "i686-w64-mingw32 build",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (arm64 slice)",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "GNU make from source; make has no runtime dependencies worth speaking of, which is why it is the one build tool that is a single static file on every platform (x86_64 slice)",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "lipo of both slices",
+     "size_budget_mb": 4,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "runs in the sandbox: make only needs a shell and a filesystem",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "simulator slice",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. mingw-w64 build of 4.4.1; a POSIX shell must be on PATH for recipes, which is exactly what a make bundle is for on Windows",
+     "size_budget_mb": 3,
+     "entry": "bin/make",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "meson",
+   "name": "Meson",
+   "version": "1.6.0",
+   "license": "Apache-2.0",
+   "method": "source",
+   "upstream": "https://github.com/mesonbuild/meson/releases",
+   "provides": [
+    "meson",
+    "meson-python"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "pure Python: the payload is the meson wheel tree plus a python layer, shared with every other Python tool (ninja stays a separate bundle)",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same tree, aarch64 python layer",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "requires an armv7 python layer",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Python layer to run meson",
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "riscv64 python layer",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the python layer on Windows first",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the python layer on Windows first",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Python layer",
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "python layer + wheel tree",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "one wheel tree, universal python layer",
+     "size_budget_mb": 50,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "meson only generates build files, so it runs even where a compiler cannot: the build itself still needs clang",
+     "size_budget_mb": 30,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "simulator slice",
+     "size_budget_mb": 30,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the python layer on Windows first",
+     "size_budget_mb": 40,
+     "entry": "bin/meson",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "ninja",
+   "name": "Ninja",
+   "version": "1.12.1",
+   "license": "Apache-2.0",
+   "method": "source",
+   "upstream": "https://github.com/ninja-build/ninja/releases",
+   "provides": [
+    "ninja",
+    "samu"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "C++ build with -static; 600 KiB and zero DT_NEEDED",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "native aarch64 build",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "musleabihf build",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "32-bit x86 build",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "riscv64 build",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "official ninja-win.zip is a single static PE; the source build with -static also works under mingw-w64",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "mingw-w64 aarch64 build; ninja has no arch-specific code paths",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "i686 mingw build",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "cmake build, arm64 slice",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "x86_64 slice",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "lipo both slices",
+     "size_budget_mb": 4,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "runs in the sandbox; used by theos",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "macho",
+     "status": "ga",
+     "notes": "simulator slice",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. official ninja-win.zip is a single static PE; the source build with -static also works under mingw-w64",
+     "size_budget_mb": 3,
+     "entry": "bin/ninja",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "node",
+   "name": "Node.js",
+   "version": "22.11.0",
+   "license": "MIT",
+   "method": "release",
+   "upstream": "https://nodejs.org/dist/",
+   "provides": [
+    "node",
+    "npm",
+    "npx",
+    "corepack"
+   ],
+   "source": "v22.11.0",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "official Node build + npm; libnode is glibc/musl-linked, so the bundle is a layer rather than a single static ELF (linux-x64 glibc)",
+     "size_budget_mb": 140,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "official Node build + npm; libnode is glibc/musl-linked, so the bundle is a layer rather than a single static ELF (linux-arm64)",
+     "size_budget_mb": 140,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "linux-armv7l build exists upstream; npm's dependency tree is heavier than the runtime and dominates the payload",
+     "size_budget_mb": 130,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "Node dropped 32-bit Linux builds after 10.x",
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "unofficial-builds.nodejs.org carries riscv64; not a first-class support level",
+     "size_budget_mb": 140,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "node.exe + npm; win-x64 zip",
+     "size_budget_mb": 130,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "experimental",
+     "notes": "win-arm64 zip exists; some native addons still ship x64-only prebuilds",
+     "size_budget_mb": 130,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Windows Node build",
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-arm64 tarball",
+     "size_budget_mb": 140,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "darwin-x64 tarball",
+     "size_budget_mb": 140,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "lipo of both node binaries plus one shared node_modules layer",
+     "size_budget_mb": 200,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "needs a jitless build (--jitless / V8 without RWX pages): the iOS sandbox denies JIT unless the app holds an entitlement",
+     "size_budget_mb": 110,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "simulator slice",
+     "size_budget_mb": 110,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. node.exe + npm; win-x64 zip",
+     "size_budget_mb": 130,
+     "entry": "bin/node",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "openssl",
+   "name": "OpenSSL CLI",
+   "version": "3.4.0",
+   "license": "Apache-2.0",
+   "method": "source",
+   "upstream": "https://github.com/openssl/openssl/releases/tag/openssl-3.4.0",
+   "provides": [
+    "openssl"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/openssl",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 10,
+     "smoke": "openssl version",
+     "notes": "no-shared no-module no-legacy: everything in one binary, so `openssl x509` does not hunt for providers."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/openssl",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 10,
+     "smoke": "openssl version"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/openssl.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "patchelf",
+   "name": "patchelf",
+   "version": "0.18.0",
+   "license": "GPL-3.0-or-later",
+   "method": "source",
+   "upstream": "https://github.com/NixOS/patchelf/releases/tag/0.18.0",
+   "provides": [
+    "patchelf"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/patchelf",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "patchelf --version"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/patchelf.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "proot",
+   "name": "proot",
+   "version": "5.4.0",
+   "license": "GPL-2.0-or-later",
+   "method": "source",
+   "upstream": "https://github.com/termux/proot",
+   "provides": [
+    "proot",
+    "proot-distro"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/proot",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "proot --version",
+     "notes": "ptrace-based chroot-less rootfs; requires the kernel to allow ptrace on the app process (allowed on iOS for self-tracing)."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/proot.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "protobuf",
+   "name": "protoc",
+   "version": "29.2",
+   "license": "BSD-3-Clause",
+   "method": "source",
+   "upstream": "https://github.com/protocolbuffers/protobuf/releases/tag/v29.2",
+   "provides": [
+    "protoc"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "experimental",
+     "entry": "bin/protoc",
+     "paths": [
+      "bin",
+      "include"
+     ],
+     "size_budget_mb": 20,
+     "smoke": "protoc --version",
+     "notes": "Needs abseil + utf8_range as static libs; well-known types ship in include/."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "experimental",
+     "entry": "bin/protoc",
+     "paths": [
+      "bin",
+      "include"
+     ],
+     "size_budget_mb": 20,
+     "smoke": "protoc --version"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/protobuf.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "python",
+   "name": "CPython",
+   "version": "3.12.7",
+   "license": "PSF-2.0",
+   "method": "release",
+   "upstream": "https://github.com/astral-sh/python-build-standalone/releases",
+   "provides": [
+    "python3",
+    "pip3",
+    "python"
+   ],
+   "source": "3.12.7",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "python-build-standalone install_only (musl): self-contained, no system libpython; stdlib is a layer so meson and other Python tools reuse it instead of shipping a second copy",
+     "size_budget_mb": 120,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "aarch64 musl build",
+     "size_budget_mb": 120,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no upstream armv7/hardfloat build; cross-compiling CPython for armv7 is a project, not a fetch",
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "python-build-standalone has no 32-bit x86 Linux build",
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "no riscv64 cross toolchain in the recipe",
+     "size_budget_mb": 120,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the recipe builds CPython from source with a POSIX toolchain; a Windows build needs a mingw cross build plus patched Modules/Setup",
+     "size_budget_mb": 110,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the recipe builds CPython from source with a POSIX toolchain; a Windows build needs a mingw cross build plus patched Modules/Setup",
+     "size_budget_mb": 110,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Windows CPython build in PBS",
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "PBS darwin-arm64",
+     "size_budget_mb": 120,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "PBS darwin-x86_64",
+     "size_budget_mb": 120,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "PBS universal2 build: one tree, both slices",
+     "size_budget_mb": 170,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "CPython builds for iOS (3.13 added an official iOS target) but only as a framework for an app: no fork/exec, no subprocess",
+     "size_budget_mb": 90,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "simulator builds come from the app's own Xcode build",
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "the recipe builds CPython from source with a POSIX toolchain; a Windows build needs a mingw cross build plus patched Modules/Setup",
+     "size_budget_mb": 110,
+     "entry": "bin/python3",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "qemu",
+   "name": "qemu-user-static",
+   "version": "9.2.0",
+   "license": "GPL-2.0-only",
+   "method": "source",
+   "upstream": "https://gitlab.com/qemu-project/qemu",
+   "provides": [
+    "qemu-aarch64",
+    "qemu-arm",
+    "qemu-i386",
+    "qemu-x86_64",
+    "qemu-riscv64"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "experimental",
+     "entry": "bin/qemu-x86_64",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 90,
+     "smoke": "qemu-x86_64 --version",
+     "notes": "One binary per guest arch, all static; the reason a phone can run x86_64 CI artifacts."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/qemu.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "ripgrep",
+   "name": "ripgrep",
+   "version": "14.1.1",
+   "license": "MIT OR Unlicense",
+   "method": "source",
+   "upstream": "https://github.com/BurntSushi/ripgrep/releases/tag/14.1.1",
+   "provides": [
+    "rg"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/rg",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "rg --version | head -1"
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/rg",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "rg --version | head -1"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/ripgrep.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "rust",
+   "name": "Rust",
+   "version": "1.83.0",
+   "license": "MIT OR Apache-2.0",
+   "method": "release",
+   "upstream": "https://static.rust-lang.org/dist/",
+   "provides": [
+    "rustc",
+    "cargo",
+    "rustdoc",
+    "rustfmt",
+    "clippy-driver",
+    "rust-analyzer"
+   ],
+   "source": "rust-1.83.0",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "rustup dist is glibc-linked, so the bundle is a layer, not a static ELF; the compiler still emits fully static binaries with `--target x86_64-unknown-linux-musl` and +crt-static",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "aarch64 dist + aarch64-unknown-linux-musl std; the usual iOS path is this toolchain plus targets aarch64-apple-ios",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "experimental",
+     "image": "ubuntu:24.04",
+     "notes": "armv7-unknown-linux-gnueabihf host toolchain from rustup; armv7-unknown-linux-musleabihf std gives static output",
+     "size_budget_mb": 800,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "rustup publishes no i686-unknown-linux-musl host toolchain; cross-compile from x86_64 instead",
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "experimental",
+     "image": "ubuntu:24.04",
+     "notes": "riscv64gc-unknown-linux-musl std exists; a native host toolchain must be assembled from the dist channel",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "x86_64-pc-windows-gnu (mingw) plus x86_64-pc-windows-msvc targets; +crt-static in .cargo/config.toml yields PE32+ linking only kernel32/msvcrt (static CRT); no Visual C++ redistributable, no vcruntime140.dll beside the binary",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "experimental",
+     "notes": "aarch64-pc-windows-msvc needs the MS linker, aarch64-pc-windows-gnullvm works with clang/lld \u2014 the gnullvm route is the one that stays static",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "i686-pc-windows-msvc is tier-1 but no host toolchain is published for it",
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "rustup aarch64-apple-darwin",
+     "size_budget_mb": 1000,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "x86_64-apple-darwin",
+     "size_budget_mb": 1000,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "rustup ships universal-apple-darwin: one compiler, both slices, and `cargo build --target aarch64-apple-ios` cross-links iOS",
+     "size_budget_mb": 1400,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no host port: swiftc/rustc/go/clang for iOS is the macos-* bundle cross-compiling with -target arm64-apple-ios; add aarch64-apple-ios via `rustup target add`",
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no host port: swiftc/rustc/go/clang for iOS is the macos-* bundle cross-compiling with -target arm64-apple-ios",
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. x86_64-pc-windows-gnu (mingw) plus x86_64-pc-windows-msvc targets; +crt-static in .cargo/config.toml yields PE32+ linking only kernel32/msvcrt (static CRT); no Visual C++ redistributable, no vcruntime140.dll beside the binary",
+     "size_budget_mb": 900,
+     "entry": "bin/rustc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "swift",
+   "name": "Swift",
+   "version": "6.0.3",
+   "license": "Apache-2.0",
+   "method": "release",
+   "upstream": "https://www.swift.org/download/",
+   "provides": [
+    "swift",
+    "swiftc",
+    "swift-build",
+    "swift-package",
+    "swift-format",
+    "sourcekit-lsp"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "official toolchain + the Static Linux SDK: `swift build --swift-sdk x86_64-swift-linux-musl` emits a fully static ELF, so the compiler is packaged but the output is not",
+     "size_budget_mb": 1400,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "image": "ubuntu:24.04",
+     "notes": "aarch64 toolchain + aarch64-swift-linux-musl SDK; same static output",
+     "size_budget_mb": 1400,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "Swift publishes no armv7 Linux toolchain and the runtime has no 32-bit ARM Linux port",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit x86 Linux toolchain exists upstream",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "experimental",
+     "image": "ubuntu:24.04",
+     "notes": "experimental upstream riscv64 toolchain; the stdlib is built but not every runtime component is validated",
+     "size_budget_mb": 1400,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "Swift for Windows needs the MSVC toolchain and SDK; the recipe targets the Linux/macOS toolchains only",
+     "size_budget_mb": 1600,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "Swift for Windows ships x86_64 only; arm64 hosts run the x86_64 toolchain under emulation",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Windows Swift toolchain",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Xcode toolchain; for iOS work this is the host half \u2014 the iOS parcel is the SDK, not a second compiler",
+     "size_budget_mb": 2200,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "Intel slice",
+     "size_budget_mb": 2200,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "both slices plus one shared stdlib layer",
+     "size_budget_mb": 3000,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no host port: swiftc/rustc/go/clang for iOS is the macos-* bundle cross-compiling with -target arm64-apple-ios",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no host port: swiftc/rustc/go/clang for iOS is the macos-* bundle cross-compiling with -target arm64-apple-ios",
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "Swift for Windows needs the MSVC toolchain and SDK; the recipe targets the Linux/macOS toolchains only",
+     "size_budget_mb": 1600,
+     "entry": "bin/swift",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "tar",
+   "name": "bsdtar (libarchive)",
+   "version": "3.7.7",
+   "license": "BSD-2-Clause",
+   "method": "source",
+   "upstream": "https://github.com/libarchive/libarchive/releases/tag/v3.7.7",
+   "provides": [
+    "tar",
+    "bsdtar",
+    "cpio",
+    "unzip"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/tar",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 8,
+     "smoke": "tar --version"
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/tar",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 8,
+     "smoke": "tar --version",
+     "notes": "bsdtar, not GNU tar: Apple's xattrs/ACL handling and no gnulib."
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/tar.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "theos",
+   "name": "Theos + Logos",
+   "version": "2024.11",
+   "license": "GPL-3.0-or-later",
+   "method": "source",
+   "upstream": "https://github.com/theos/theos",
+   "provides": [
+    "theos",
+    "logos.pl",
+    "logify.pl",
+    "nic.pl",
+    "dm.pl"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "theos on Linux: perl + make + the shared makefiles. Needs a clang layer and a theos SDK; without them `make package` fails at compile time, which the recipe checks at pack time",
+     "size_budget_mb": 120,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "same tree",
+     "size_budget_mb": 120,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no iOS SDK can be assembled for an armv7 host; theos host tooling is 64-bit only",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "theos host tooling is 64-bit only",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "pure perl+make, so a tree copy should work; unexercised",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "theos is a Makefile+perl build system over a POSIX shell; WSL or a Linux container is the supported path",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "same as windows-x86_64",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "same as windows-x86_64",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "the supported host: theos + SDK symlinks + logos; pairs with the llvm layer for ld64.lld and the Darwin SDK",
+     "size_budget_mb": 140,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same tree",
+     "size_budget_mb": 140,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "scripts are arch-neutral",
+     "size_budget_mb": 200,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "theos inside iSH: perl + make + ldid work; compiling needs clang and an SDK, both of which are layers of their own",
+     "size_budget_mb": 140,
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no simulator host inside the device sandbox",
+     "entry": "bin/theos",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "theos is a Makefile+perl build system over a POSIX shell; WSL or a Linux container is the supported path"
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "typescript",
+   "name": "TypeScript",
+   "version": "5.7.2",
+   "license": "Apache-2.0",
+   "method": "release",
+   "upstream": "https://registry.npmjs.org/typescript",
+   "provides": [
+    "tsc",
+    "tsserver"
+   ],
+   "targets": {
+    "linux-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "tsc is JavaScript: the payload is the npm tarball plus a node layer, and both share the node tree rather than duplicating it",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "same tree; node layer supplies the runtime",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "node layer must be built first",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Node runtime to host tsc",
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "layer",
+     "status": "planned",
+     "notes": "depends on the node riscv64 layer",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the node layer on Windows first",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the node layer on Windows first",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Node runtime to host tsc",
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "tsc + node layer",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "tsc + node layer",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "layer",
+     "status": "ga",
+     "notes": "one JS tree, two node slices",
+     "size_budget_mb": 110,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "works with a jitless node layer",
+     "size_budget_mb": 70,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "layer",
+     "status": "experimental",
+     "notes": "simulator slice",
+     "size_budget_mb": 70,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "needs the node layer on Windows first",
+     "size_budget_mb": 90,
+     "entry": "bin/tsc",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "xtool",
+   "name": "xtool",
+   "version": "1.14",
+   "license": "MIT",
+   "method": "prebuilt",
+   "upstream": "https://github.com/xtool-org/xtool",
+   "provides": [
+    "xtool",
+    "xtool-lldb"
+   ],
+   "targets": {
+    "macos-arm64": {
+     "tier": "sfx",
+     "status": "experimental",
+     "entry": "bin/xtool",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 120,
+     "smoke": "xtool --version",
+     "notes": "SwiftPM-based iOS app builder for Linux/macOS hosts; needs the Darwin Swift SDK at run time (xtool setup downloads it, the recipe can bake it in with --bake-sdk)."
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "not-supported",
+     "entry": "",
+     "notes": "xtool drives xcodebuild-equivalents and links Mach-O on a desktop host; it has no iOS host support."
+    },
+    "linux-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-arm64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "macos-x86_64": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xtool.sh yet"
+    },
+    "linux-universal": {
+     "tier": "sfx",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "xz",
+   "name": "XZ Utils",
+   "version": "5.6.3",
+   "license": "0BSD AND LGPL-2.1-or-later AND GPL-2.0-or-later",
+   "method": "source",
+   "upstream": "https://github.com/tukaani-project/xz/releases/tag/v5.6.3",
+   "provides": [
+    "xz",
+    "unxz",
+    "xzcat",
+    "lzma"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/xz",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "xz --version"
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/xz",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 4,
+     "smoke": "xz --version"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/xz.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  },
+  {
+   "id": "zig",
+   "name": "Zig",
+   "version": "0.13.0",
+   "license": "MIT",
+   "method": "release",
+   "upstream": "https://ziglang.org/download/",
+   "provides": [
+    "zig"
+   ],
+   "source": "0.13.0",
+   "targets": {
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "single static binary; also a full C/C++ cross compiler (`zig cc -target aarch64-linux-musl`), which is how this repository cross-builds ELF from a macOS host",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "aarch64-linux tarball",
+     "size_budget_mb": 170,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-armv7": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "no armv7 host build; runs the aarch64/aarch64-emulated compiler and targets arm-linux-musleabihf",
+     "size_budget_mb": 170,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-386": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "no i386 host build; x86_64 bin targets x86-linux-musl",
+     "size_budget_mb": 170,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-riscv64": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "no riscv64 host build upstream; cross-targeting works",
+     "size_budget_mb": 170,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "zig-windows-x86_64, one PE",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "zig-windows-aarch64",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "no 32-bit Windows host build",
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "zig-macos-aarch64",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "zig-macos-x86_64",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "lipo of both slices",
+     "size_budget_mb": 240,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "zig can compile for aarch64-ios given the SDK; the binary still has to be signed by the enclosing app",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "experimental",
+     "notes": "simulator target",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "windows-universal": {
+     "tier": "static",
+     "status": "ga",
+     "notes": "x86_64 PE carrier that also carries the arm64 payload: it runs natively on x64 and under emulation on ARM64 Windows, where PROCESSOR_ARCHITEW6432 selects the native arm64 tree. zig-windows-x86_64, one PE",
+     "size_budget_mb": 180,
+     "entry": "bin/zig",
+     "paths": [
+      "bin"
+     ]
+    },
+    "linux-universal": {
+     "tier": "none",
+     "status": "not-supported",
+     "notes": "the kernel execs the carrier it was built for; a single Linux file cannot serve two architectures. Ship the per-arch files, or a script that picks."
+    }
+   }
+  },
+  {
+   "id": "zstd",
+   "name": "zstd",
+   "version": "1.5.6",
+   "license": "BSD-3-Clause OR GPL-2.0",
+   "method": "source",
+   "upstream": "https://github.com/facebook/zstd/releases/tag/v1.5.6",
+   "provides": [
+    "zstd",
+    "zstdcat",
+    "unzstd"
+   ],
+   "targets": {
+    "linux-arm64": {
+     "tier": "static",
+     "status": "ga",
+     "entry": "bin/zstd",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "zstd --version"
+    },
+    "ios-arm64": {
+     "tier": "macho",
+     "status": "ga",
+     "entry": "bin/zstd",
+     "paths": [
+      "bin"
+     ],
+     "size_budget_mb": 6,
+     "smoke": "zstd --version"
+    },
+    "linux-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "linux-armv7": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "linux-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "linux-riscv64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "windows-x86_64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "windows-arm64": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "windows-386": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "macos-arm64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-x86_64": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "macos-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "ios-arm64-sim": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    },
+    "windows-universal": {
+     "tier": "none",
+     "status": "planned",
+     "notes": "no Windows/extra-arch branch in recipes/zstd.sh yet"
+    },
+    "linux-universal": {
+     "tier": "static",
+     "status": "planned",
+     "notes": "recipe not exercised on this target"
+    }
+   }
+  }
+ ]
 }

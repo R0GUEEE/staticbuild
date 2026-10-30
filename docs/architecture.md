@@ -32,36 +32,76 @@ per target.
 ## Bundle format
 
 ```
-+----------------------+---------------------------+----------------------------+
-| SFX stub             | zstd(tar payload)         | 64-byte trailer            |
-| ELF or Mach-O, ~2 MB | deterministic, sorted     | magic, offsets, sha256     |
-+----------------------+---------------------------+----------------------------+
++--------------+----------------+---------------------+--------------+---------+
+| carrier      | blob region    | zstd(index json)    | payload tree | trailer |
+| ELF/PE/Mach-O| unique file    | one entry per       | materialised | 64 B    |
+| (the stub)   | contents       | os/arch, with       | at run time  |         |
+|              |                | digests + offsets   |              |         |
++--------------+----------------+---------------------+--------------+---------+
 ```
 
-Trailer, little endian, fixed size so it can be read with one `pread` from the end:
+Trailer, little endian, fixed size so it can be read with one `pread`:
 
 | offset | size | field |
 |---|---|---|
-| 0 | 4 | magic `SBX1` |
-| 4 | 2 | version (1) |
-| 6 | 2 | flags: bit0 layered, bit1 sealed |
-| 8 | 8 | payload offset (== stub size) |
-| 16 | 8 | payload length |
-| 24 | 32 | SHA-256 of the compressed payload |
+| 0 | 4 | magic `SBX2` |
+| 4 | 2 | version (2; version 1 bundles still run) |
+| 6 | 2 | flags: bit0 layered, bit1 sealed, bit2 multi-payload |
+| 8 | 8 | index offset |
+| 16 | 8 | index length |
+| 24 | 32 | SHA-256 of the compressed index |
 | 56 | 8 | `SOURCE_DATE_EPOCH` of the build |
 
-The stub (`stub/`, ~600 lines of Go, no cgo) reads the trailer, verifies the
-payload hash, takes an advisory lock, extracts into
-`$XDG_CACHE_HOME/staticbuild/b/<hash12>`, writes `.sb-ok`, and `execve`s
-`.sb/meta.json`'s `entry` with a cleaned environment:
+The index is JSON, zstd-compressed, key-sorted:
+
+```json
+{
+  "format": "SBX2", "tool": "clang", "version": "20.1.8",
+  "blob_base": 2425092,
+  "blobs": { "<sha256[:32]>": [offset, compressed_size, size, raw_flag] },
+  "payloads": [{
+    "id": "windows-arm64", "os": "windows", "arch": "arm64",
+    "family": "pe", "tier": "sfx", "entry": "bin/clang.exe",
+    "paths": ["bin"], "env": {...}, "aliases": {...}, "layers": ["<sha>"],
+    "files": [{"p": "bin/clang.exe", "k": "f", "m": 493, "r": "<sha>"},
+              {"p": "lib", "k": "d", "m": 493},
+              {"p": "bin/clang++", "k": "l", "r": "clang"}]
+  }]
+}
+```
+
+Three properties fall out of that shape:
+
+* **one file can carry several payloads.** The stub picks by `(os, arch)` of the
+  host it is running on, which is what makes `macos-universal` and
+  `windows-universal` real rather than a naming convention.
+* **content is stored once.** Blobs are keyed by content digest and emitted in
+  digest order, so two payloads that share a header tree, a JRE or a stdlib
+  store it a single time.
+* **determinism is structural.** Entries are sorted, modes normalised, mtime
+  pinned to `SOURCE_DATE_EPOCH`, index serialised with sorted keys. Same inputs,
+  same bytes, same sha256.
+
+At run time the stub validates the trailer, checks the index digest, extracts
+the matching payload into `$XDG_CACHE_HOME/staticbuild/b/<payload>-<index12>`
+(atomic rename; a second process that loses the race reuses the winner's tree),
+lifts `layers/<sha>` into `staticbuild/l/<sha>` and rewrites `@@SB_LAYER@@`
+symlinks to absolute paths, then `execve`s the entry with a cleaned environment:
 
 * `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `JAVA_HOME`,
   `NODE_OPTIONS`, `CLASSPATH`, `PERL5LIB` are dropped — a bundle must not inherit
   the host's idea of where its runtime lives;
-* `SB_BUNDLE_ROOT`, `SB_BUNDLE_TOOL`, `SB_BUNDLE_VERSION` are added;
-* `meta.paths` is prepended to `PATH`;
-* `meta.env` is expanded with `${ROOT}` → extraction directory (so `GOROOT`,
-  `JAVA_HOME`, `CMAKE_ROOT`, `THEOS` are all inside the bundle).
+* `PATH` gets the payload's `bin` directories first;
+* `env` values are expanded with `${ROOT}`, `${LAYERS}` and `${CACHE}`, so
+  `GOROOT`, `JAVA_HOME`, `PYTHONHOME` and `THEOS` all point inside the bundle;
+* on Windows, where there is no `execve`, the stub spawns the entry with
+  inherited handles and forwards the exit code.
+
+Introspection never extracts anything: `--sb-print-index`, `--sb-payloads`,
+`--sb-print-meta`, `--sb-list`, `--sb-version`, `--sb-cache`. `--sb-extract-dir
+DIR` materialises the tree and stops, which is how the compose job repacks a
+universal file without a second build, and how `scripts/compose.py` recovers a
+tree from an artifact.
 
 ### Layers
 

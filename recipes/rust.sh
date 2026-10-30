@@ -1,53 +1,51 @@
 #!/bin/sh
-# deps: (none — upstream binaries)
-# rustc + cargo, plus the iOS std so the same bundle cross-compiles
-# staticlibs/cdylibs for aarch64-apple-ios.
-. "$(dirname "$0")/_common.sh"
+# deps: curl xz bash
+# Rust — the official dist tarball per host triple, installed with its own
+# install.sh so the rustlib layout, the target JSON and the Cargo registry
+# skeleton all end up where rustc expects them.
+#
+# The compiler itself is glibc/CRT-linked, so this is a layer bundle; the
+# *output* can still be fully static: `--target x86_64-unknown-linux-musl`,
+# `--target aarch64-unknown-linux-musl`, or RUSTFLAGS=-Ctarget-feature=+crt-static
+# on the Windows GNU triples.
+. "$(dirname "$0")/_release.sh"
 sb_init
 
-case "$SB_TARGET" in
-  linux-arm64)  _host=aarch64-unknown-linux-musl ;;
-  linux-x86_64) _host=x86_64-unknown-linux-musl ;;
-  macos-arm64)  _host=aarch64-apple-darwin ;;
-  *) die "rust: no upstream toolchain for $SB_TARGET" ;;
-esac
+REL=$(sb_pick "linux-x86_64=x86_64-unknown-linux-gnu linux-arm64=aarch64-unknown-linux-gnu \
+linux-armv7=armv7-unknown-linux-gnueabihf linux-riscv64=riscv64gc-unknown-linux-gnu \
+windows-x86_64=x86_64-pc-windows-gnu windows-arm64=aarch64-pc-windows-msvc \
+macos-arm64=aarch64-apple-darwin macos-x86_64=x86_64-apple-darwin \
+macos-universal=universal-apple-darwin" 2>/dev/null || true)
+[ -n "$REL" ] || die "rust: no dist for $SB_TARGET"
 
-_pfx="rust-$SB_VERSION-$_host"
-src=$(sb_fetch "https://static.rust-lang.org/dist/$_pfx.tar.xz")
-sb_unpack "$src" "$SB_WORK/src/rust"
+src=$(sb_fetch "https://static.rust-lang.org/dist/rust-$SB_VERSION-$REL.tar.xz")
+work=$SB_WORK/src/rust-$SB_TARGET
+rm -rf "$work" "$SB_WORK/rust-prefix-$SB_TARGET"
+sb_unpack_any "$src" "$work"
+root=$(find "$work" -maxdepth 1 -type d -name "rust-$SB_VERSION-*" | head -1)
+[ -n "$root" ] || die "rust: unexpected tarball layout"
 
-sb_cd "$SB_WORK/src/rust/$_pfx"
-./install.sh --prefix="$SB_STAGE/rust" --disable-ldconfig --without=rust-docs
+prefix=$SB_WORK/rust-prefix-$SB_TARGET
+# install.sh is a bash script; it wants a writable prefix and no ldconfig call.
+( cd "$root" && bash ./install.sh --prefix="$prefix" --disable-ldconfig \
+    --components=rustc,cargo,rust-std ) > "$SB_WORK/rust-install.log" 2>&1 || {
+      tail -30 "$SB_WORK/rust-install.log" >&2
+      die "rust install.sh failed"
+    }
 
-# rust-std for the iOS target (and the simulator slice, which is a different rustc target)
-for _t in aarch64-apple-ios aarch64-apple-ios-sim; do
-  _f="rust-std-$SB_VERSION-$_t.tar.xz"
-  if _p=$(sb_fetch "https://static.rust-lang.org/dist/$_f" 2>/dev/null); then
-    sb_unpack "$_p" "$SB_WORK/src/rust-std-$_t"
-    ( cd "$SB_WORK/src/rust-std-$_t/rust-std-$SB_VERSION-$_t" && \
-      ./install.sh --prefix="$SB_STAGE/rust" --disable-ldconfig )
+sb_stage_dir "$prefix" rust
+mkdir -p "$SB_STAGE/bin"
+for b in rustc cargo rustdoc; do
+  if [ "$SB_FAMILY" = pe ]; then
+    cp "$SB_STAGE/rust/bin/$b.exe" "$SB_STAGE/bin/$b.exe" 2>/dev/null || true
   else
-    warn "rust-std for $_t unavailable at $SB_VERSION (skipped)"
+    ln -sf ../rust/bin/$b "$SB_STAGE/bin/$b"
   fi
 done
+[ "$SB_FAMILY" = pe ] || sb_alias "cargo=bin/cargo" "rustdoc=bin/rustdoc"
 
-# Docs and man pages are ~40 MiB of nothing a compiler reads.
-rm -rf "$SB_STAGE/rust/share/doc" "$SB_STAGE/rust/share/man" "$SB_STAGE/rust/lib/rustlib/etc"
-# The musl host toolchain is already static, but release binaries carry ~30 MiB
-# of symbols each; strip() is the difference between 420 MiB and 300 MiB.
-if command -v strip >/dev/null 2>&1; then
-  for f in "$SB_STAGE/rust/bin"/*; do
-    [ -f "$f" ] && strip -x "$f" 2>/dev/null || true
-  done
-fi
-
-mkdir -p "$SB_STAGE/bin"
-for b in rustc cargo rustdoc rustfmt clippy-driver cargo-clippy rust-lld rust-gdb; do
-  [ -f "$SB_STAGE/rust/bin/$b" ] && ln -sf "../rust/bin/$b" "$SB_STAGE/bin/$b"
-done
-
+export SB_ENV='"CARGO_HOME": "${ROOT}/cargo", "RUSTUP_HOME": "${ROOT}/rustup"'
 export SB_PATHS="bin"
-export SB_ENTRY="bin/cargo"
-export SB_ENV='"CARGO_HOME": "${ROOT}/cargo", "RUSTUP_TOOLCHAIN": "staticbuild"'
-sb_layer rust/lib
+export SB_ENTRY="bin/rustc"
+sb_layer rust
 sb_finish

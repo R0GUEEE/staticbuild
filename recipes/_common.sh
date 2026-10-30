@@ -38,14 +38,31 @@ export SOURCE_DATE_EPOCH=$SB_EPOCH
 [ -n "$SB_TARGET" ] || { echo "sb: SB_TARGET is required (linux-arm64, linux-x86_64, ios-arm64, macos-arm64)" >&2; exit 2; }
 
 case "$SB_TARGET" in
-  linux-arm64)   SB_ARCH=aarch64; SB_TRIPLE=aarch64-linux-musl; SB_FAMILY=elf ;;
-  linux-x86_64)  SB_ARCH=x86_64;  SB_TRIPLE=x86_64-linux-musl;  SB_FAMILY=elf ;;
-  ios-arm64)     SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-ios;    SB_FAMILY=macho ;;
-  ios-arm64-sim) SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-ios-simulator; SB_FAMILY=macho ;;
-  macos-arm64)   SB_ARCH=arm64;   SB_TRIPLE=arm64-apple-darwin; SB_FAMILY=macho ;;
-  macos-x86_64)  SB_ARCH=x86_64;  SB_TRIPLE=x86_64-apple-darwin; SB_FAMILY=macho ;;
+  # name             os        arch      goarch    triple                       family
+  linux-x86_64)   SB_OS=linux   SB_ARCH=x86_64  SB_GOARCH=amd64   SB_TRIPLE=x86_64-linux-musl            SB_FAMILY=elf ;;
+  linux-arm64)    SB_OS=linux   SB_ARCH=aarch64 SB_GOARCH=arm64   SB_TRIPLE=aarch64-linux-musl           SB_FAMILY=elf ;;
+  linux-armv7)    SB_OS=linux   SB_ARCH=armv7   SB_GOARCH=arm     SB_TRIPLE=armv7-linux-musleabihf       SB_FAMILY=elf ;;
+  linux-386)      SB_OS=linux   SB_ARCH=386     SB_GOARCH=386     SB_TRIPLE=i386-linux-musl              SB_FAMILY=elf ;;
+  linux-riscv64)  SB_OS=linux   SB_ARCH=riscv64 SB_GOARCH=riscv64 SB_TRIPLE=riscv64-linux-musl           SB_FAMILY=elf ;;
+  windows-x86_64) SB_OS=windows SB_ARCH=x86_64  SB_GOARCH=amd64   SB_TRIPLE=x86_64-w64-mingw32           SB_FAMILY=pe ;;
+  windows-arm64)  SB_OS=windows SB_ARCH=arm64   SB_GOARCH=arm64   SB_TRIPLE=aarch64-w64-mingw32          SB_FAMILY=pe ;;
+  windows-386)    SB_OS=windows SB_ARCH=386     SB_GOARCH=386     SB_TRIPLE=i686-w64-mingw32             SB_FAMILY=pe ;;
+  macos-arm64)    SB_OS=macos   SB_ARCH=arm64   SB_GOARCH=arm64   SB_TRIPLE=arm64-apple-darwin           SB_FAMILY=macho ;;
+  macos-x86_64)   SB_OS=macos   SB_ARCH=x86_64  SB_GOARCH=amd64   SB_TRIPLE=x86_64-apple-darwin          SB_FAMILY=macho ;;
+  macos-universal) SB_OS=macos  SB_ARCH=universal SB_GOARCH=universal SB_TRIPLE=universal-apple-darwin   SB_FAMILY=macho ;;
+  ios-arm64)      SB_OS=ios     SB_ARCH=arm64   SB_GOARCH=arm64   SB_TRIPLE=arm64-apple-ios              SB_FAMILY=macho ;;
+  ios-arm64-sim)  SB_OS=ios     SB_ARCH=arm64   SB_GOARCH=arm64   SB_TRIPLE=arm64-apple-ios-simulator    SB_FAMILY=macho ;;
+  windows-universal) SB_OS=windows SB_ARCH=universal SB_GOARCH=amd64 SB_TRIPLE=universal-windows SB_FAMILY=pe ;;
+  linux-universal) SB_OS=linux  SB_ARCH=x86_64  SB_GOARCH=amd64   SB_TRIPLE=x86_64-linux-musl            SB_FAMILY=elf ;;
   *) echo "sb: unknown SB_TARGET '$SB_TARGET'" >&2; exit 2 ;;
 esac
+
+# Executable suffix and CRT flags for the target family.
+case "$SB_FAMILY" in
+  pe) SB_EXE=.exe ;;
+  *)  SB_EXE= ;;
+esac
+export SB_EXE
 
 SB_EFFECTIVE_TIER=${SB_TIER:-sfx}
 export SB_ARCH SB_TRIPLE SB_FAMILY SB_EFFECTIVE_TIER
@@ -86,26 +103,41 @@ sb_init() {
 sb_cc() {
   if [ -n "${SB_CC:-}" ]; then echo "$SB_CC"; return; fi
   case "$SB_FAMILY" in
-    elf)   echo "${CROSS_CC:-cc}" ;;
+    elf) echo "${CROSS_CC:-cc}" ;;
+    pe)
+      if [ -n "${MINGW_CC:-}" ]; then echo "$MINGW_CC"
+      elif command -v "$SB_TRIPLE-gcc" >/dev/null 2>&1; then echo "$SB_TRIPLE-gcc"
+      elif command -v zig >/dev/null 2>&1; then echo "zig cc -target $SB_TRIPLE"
+      else die "no Windows cross compiler: install mingw-w64 or zig, or set MINGW_CC"; fi ;;
     macho)
-      if [ -n "${IOS_CC:-}" ]; then echo "$IOS_CC";
-      elif [ "$(uname -s)" = Darwin ]; then echo xcrun -sdk "${SB_SDK:-iphoneos}" clang;
+      if [ -n "${IOS_CC:-}" ] && { [ "$SB_OS" = ios ] || [ -n "${IOS_HOST:-}" ]; }; then echo "$IOS_CC"
+      elif [ "$(uname -s)" = Darwin ]; then echo xcrun -sdk "${SB_SDK:-macosx}" clang
       else die "no Mach-O host compiler: set IOS_CC"; fi ;;
   esac
 }
 
-# Extra flags every recipe appends: arch, sysroot for iOS, static linking.
+# Extra flags every recipe appends: arch, sysroot, static CRT.
 sb_cflags() {
   case "$SB_FAMILY" in
     elf) echo "-O2 -fPIC -static-libgcc" ;;
+    pe)
+      echo "-O2 -static -static-libgcc -static-libstdc++ -D_WIN32_WINNT=0x0601"
+      if [ "$SB_ARCH" = arm64 ]; then echo "-D_ARM64_;-D_WIN32_WINNT=0x0601"; fi ;;
     macho)
-      [ -n "$SB_TARGET" ] || { echo "sb: SB_TARGET is required (linux-arm64, linux-x86_64, ios-arm64, macos-arm64)" >&2; exit 2; }
-
-case "$SB_TARGET" in
+      case "$SB_TARGET" in
         ios-arm64|ios-arm64-sim)
-          echo "-O2 -arch $SB_ARCH -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=15.0" ;;
-        *) echo "-O2 -arch $SB_ARCH" ;;
+          echo "-O2 -arch $SB_ARCH -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=${SB_MIN_OS:-15.0}" ;;
+        *) echo "-O2 -arch $SB_ARCH -isysroot $(xcrun --sdk macosx --show-sdk-path) -mmacosx-version-min=${SB_MACOS_MIN:-11.0}" ;;
       esac ;;
+  esac
+}
+
+# Windows/MSVC-style flags some recipes need: sb_ldflags is what the linker gets.
+sb_ldflags() {
+  case "$SB_FAMILY" in
+    pe) echo "-static -static-libgcc -static-libstdc++ -Wl,--no-insert-timestamp" ;;
+    elf) echo "-static" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -295,38 +327,50 @@ PY
 
 # ---------------------------------------------------------------- finishing
 
+# The carrier stub for this target. Built on demand and cached in build/stub so
+# a matrix job builds it once and every recipe in that job reuses it.
+sb_stub() {
+  _stub=$SB_WORK/stub/sb-stub-$SB_TARGET
+  if [ ! -x "$_stub" ]; then
+    log "building carrier stub for $SB_TARGET"
+    sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" >/dev/null 2>&1 || true
+  fi
+  [ -x "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh)"
+  printf '%s\n' "$_stub"
+}
+
+# A tree that is already a single executable needs no container: shipping a
+# 2.4 MB stub around a 600 KiB ninja would be worse than the thing it wraps.
+sb_is_bare() {
+  [ "${SB_BARE:-auto}" = 1 ] && return 0
+  [ "${SB_BARE:-auto}" = 0 ] && return 1
+  case "$SB_EFFECTIVE_TIER" in static|macho) : ;; *) return 1 ;; esac
+  [ -z "${SB_ALIASES:-}" ] || return 1
+  [ -z "${SB_LAYERS:-}" ] || return 1
+  [ -z "${SB_ENV:-}" ] || return 1
+  [ "$(find "$SB_STAGE" -type f | wc -l)" -le 2 ] || return 1
+}
+
 sb_finish() {
   sb_strip_stage
-  _stub=$SB_WORK/sb-stub
-  if [ ! -x "$_stub" ]; then
-    log "building SFX stub"
-    # -buildvcs=false: the stub is built from inside a bind-mounted checkout whose
-  # git ownership differs from the container user, and go's VCS stamping then
-  # fails with 'error obtaining VCS status: exit status 128'.
-  ( cd "$SB_ROOT/stub" && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w' -o "$_stub" . ) \
-      || die "stub build failed"
-  fi
-
   sb_meta
 
   _out=$SB_DIST/$SB_TOOL-$SB_VERSION-$SB_TARGET
-  _flags=""
-  case " ${SB_LAYERS:-} " in *" "*) [ -n "${SB_LAYERS:-}" ] && _flags=--layered ;; esac
+  case "$SB_FAMILY" in pe) _out=$_out.exe ;; esac
 
-  case "$SB_EFFECTIVE_TIER" in
-    static|macho)
-      # A single executable: it *is* the payload, so there is nothing to pack.
-      # We still wrap it when the tree carries more than the entry (share/, include/).
-      if [ -n "${SB_ALIASES:-}" ] || [ "$(find "$SB_STAGE" -type f | wc -l)" -gt 2 ]; then
-        python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags
-      else
-        cp "$SB_STAGE/$SB_ENTRY" "$_out"
-        chmod 755 "$_out"
-        log "copied bare binary → $_out"
-      fi ;;
-    *)
-      python3 "$SB_ROOT/scripts/pack.py" --stub "$_stub" --root "$SB_STAGE" --out "$_out" $_flags ;;
-  esac
+  if sb_is_bare; then
+    cp "$SB_STAGE/$SB_ENTRY" "$_out"
+    chmod 755 "$_out"
+    log "bare binary → $(basename "$_out")"
+  else
+    _stub=$(sb_stub)
+    _extra=""
+    # SB_EXTRA_PAYLOADS="macos-x86_64=/path/to/stage" folds more carrier
+    # payloads into the same file (a recipe that built both slices in one job).
+    for _p in ${SB_EXTRA_PAYLOADS:-}; do _extra="$_extra --payload $_p"; done
+    python3 "$SB_ROOT/scripts/pack.py"       --stub "$_stub" --out "$_out"       --tool "$SB_TOOL" --version "$SB_VERSION"       --payload "$SB_TARGET=$SB_STAGE" $_extra \
+      || die "pack failed for $(basename "$_out")"
+  fi
 
   _size=$(wc -c < "$_out" | tr -d ' ')
   _sum=$(sb_sha256 "$_out")

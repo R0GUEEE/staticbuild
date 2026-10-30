@@ -45,7 +45,16 @@ func main() {
 	}
 
 	args := os.Args[1:]
-	dispatch := len(args) >= 1 && (args[0] == "--sb-run" || args[0] == "--sb-list")
+	// --sb-payload may appear anywhere; it selects the payload for this run.
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--sb-payload" && i+1 < len(args) {
+			os.Setenv("SB_PAYLOAD", args[i+1])
+			args = append(args[:i], args[i+2:]...)
+			break
+		}
+	}
+	// --sb-run needs the extracted tree; everything else is metadata-only.
+	dispatch := len(args) >= 1 && args[0] == "--sb-run"
 	if len(args) >= 1 && strings.HasPrefix(args[0], "--sb-") && !dispatch {
 		if err := inspect(self, args); err != nil {
 			fatalf("%s: %v", filepath.Base(self), err)
@@ -244,14 +253,7 @@ func inspect(self string, args []string) error {
 		return nil
 
 	case "--sb-payload":
-		if len(args) < 2 {
-			return fmt.Errorf("--sb-payload needs an id (see --sb-payloads)")
-		}
-		os.Setenv("SB_PAYLOAD", args[1])
-		// Re-enter without the flag so the normal run path handles it.
-		os.Args = append([]string{os.Args[0]}, args[2:]...)
-		main()
-		return nil
+		return fmt.Errorf("--sb-payload needs an id (see --sb-payloads)")
 	}
 	return fmt.Errorf("unknown flag %q", args[0])
 }

@@ -43,8 +43,16 @@ tools/%: FORCE
 
 FORCE:
 
+# Carrier stubs: one per target, cross-built from the host (CGO off). A macOS
+# host additionally lipos the two Mach-O slices into macos-universal.
 stub:
-	cd stub && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w' -o $(ROOT)/build/sb-stub .
+	sh scripts/stub-build.sh $(TARGET)
+
+stubs:
+	sh scripts/stub-build.sh
+
+compose:
+	@python3 scripts/matrix.py --compose $(if $(TOOL),--ids $(TOOL),)
 
 # Install the build dependencies a recipe declares in its header.
 # Every recipe also needs: python3 (pack.py), zstd (payload), go (SFX stub).
@@ -57,12 +65,15 @@ deps:
 matrix:
 	@python3 scripts/matrix.py --target $(TARGET) --pretty
 
-verify: 
-	@sh scripts/verify.sh --all
+verify:
+	@python3 scripts/verify.py --all
 
 lint:
+	@python3 tools/gen_manifest.py --stdout > /tmp/manifest.check.json
+	@diff -q /tmp/manifest.check.json manifest/tools.json >/dev/null || \
+	  { echo "manifest/tools.json is stale: run python3 tools/gen_manifest.py"; exit 1; }
 	@python3 scripts/matrix.py --check
-	@python3 -m py_compile scripts/pack.py scripts/matrix.py && echo "python ok"
+	@python3 -m py_compile scripts/*.py tools/*.py && echo "python ok"
 	@for f in recipes/*.sh scripts/*.sh; do sh -n "$$f" || exit 1; done && echo "shell ok"
 	@if command -v shellcheck >/dev/null; then shellcheck -S warning recipes/*.sh scripts/*.sh; fi
 
@@ -80,5 +91,5 @@ help:
 	  'make lint                         manifest + shell + python checks' \
 	  'make verify                       tier/budget/smoke every artifact' \
 	  '' \
-	  'targets: linux-arm64 linux-x86_64 ios-arm64 macos-arm64' \
+	  'targets: (python3 scripts/matrix.py --list-targets)' \
 	  'tools:' $(TOOLS)

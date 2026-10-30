@@ -14,7 +14,7 @@ sb_make_jre "$SB_STAGE/jre"
 
 mkdir -p "$SB_STAGE/bin"
 for b in java javac jar jlink jdeps javap jshell keytool; do
-  [ -x "$SB_STAGE/jre/bin/$b" ] || continue
+  [ -x "$SB_STAGE/jre/bin/$b" ] || [ -x "$SB_STAGE/jre/bin/$b.exe" ] || continue
   sb_wrapper "$b" <<WRAP
 #!/bin/sh
 set -eu

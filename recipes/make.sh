@@ -9,6 +9,17 @@ sb_unpack "$src" "$SB_WORK/src/make"
 sb_cd "$SB_WORK/src/make/make-$SB_VERSION"
 
 case "$SB_FAMILY" in
+  pe)
+    # GNU make cross-built for Windows: --host selects the mingw tools, and the
+    # absence of a POSIX shell at run time is fine because recipes that use make
+    # bring their own shell (busybox or sh.exe).
+    ./configure --host="$SB_TRIPLE" --disable-nls --without-guile \
+      CFLAGS="-O2" LDFLAGS="-static" > "$SB_WORK/make-configure.log" 2>&1 \
+      || { tail -20 "$SB_WORK/make-configure.log" >&2; die "make configure failed"; }
+    make -j "$SB_JOBS" > "$SB_WORK/make-build.log" 2>&1 \
+      || { tail -20 "$SB_WORK/make-build.log" >&2; die "make build failed"; }
+    sb_bin make.exe make.exe
+    ;;
   elf)
     ./configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"

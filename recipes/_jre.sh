@@ -20,17 +20,22 @@ sb_jdk_root() {
   case "$SB_ARCH" in
     aarch64|arm64) _a=aarch64 ;;
     x86_64)        _a=x64 ;;
-    *) die "temurin: no build for $SB_ARCH" ;;
+    *) die "temurin: no $SB_ARCH build (arm32/386/riscv have no current JDK)" ;;
   esac
   case "$SB_TARGET" in
-    macos-*) _os=mac ;;
-    *)       _os=linux ;;
+    macos-*)   _os=mac ;;
+    windows-*) _os=windows ;;
+    *)         _os=linux ;;
   esac
-  _f=$SB_CACHE/temurin-$SB_JAVA_MAJOR-$_os-$_a.tar.gz
+  case "$_os" in
+    windows) _ext=zip ;;
+    *)       _ext=tar.gz ;;
+  esac
+  _f=$SB_CACHE/temurin-$SB_JAVA_MAJOR-$_os-$_a.$_ext
   if [ ! -f "$_f" ]; then
     log "fetch temurin $SB_JAVA_MAJOR ($_os-$_a)"
     curl -fsSL --retry 3 --retry-delay 2 -o "$_f.part" \
-      "https://api.adoptium.net/v3/binary/latest/$SB_JAVA_MAJOR/ga/$_os/$_a/jdk/hotspot/normal/eclipse" \
+      "https://api.adoptium.net/v3/binary/latest/$SB_JAVA_MAJOR/ga/$_os/$_a/jdk/hotspot/normal/eclipse?project=jdk" \
       || die "temurin download failed"
     mv "$_f.part" "$_f"
   fi
