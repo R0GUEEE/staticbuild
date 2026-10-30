@@ -1,24 +1,23 @@
 // Command sb-stub is the carrier of every bundle this repository produces.
 //
-// It is compiled once per target (ELF, Mach-O, PE; static, CGO off) and
-// scripts/pack.py appends the payload, so the artifact is: this binary, a blob
-// region, an index, a trailer.
+// Compiled once per target (ELF, Mach-O, PE; static, CGO off). pack.py appends
+// the blob region, the index and a trailer, so the artefact is one file.
 //
-// At run time it validates the trailer and index digest, extracts the payload
-// matching the host into a content-addressed cache (shared across every bundle
-// that carries the same layer), and hands the process to the real program.
+// At run time it validates the trailer and the index digest, extracts the
+// payload matching the host into a content-addressed cache (shared across every
+// bundle carrying the same layer), and hands the process to the real program.
 //
-// Introspection flags never touch the payload:
+// Introspection flags never extract a payload:
 //
 //	--sb-version            stub + index digest
-//	--sb-print-index        full payload catalogue as JSON
+//	--sb-print-index        the whole payload catalogue as JSON
 //	--sb-print-meta         metadata of the payload this host would run
 //	--sb-payloads           one line per payload
 //	--sb-list               commands this bundle answers to
 //	--sb-cache              extraction root
 //	--sb-clean              remove the extraction root
 //	--sb-extract-dir DIR    materialise the tree and stop
-//	--sb-payload ID         run a specific payload (cross-form testing)
+//	--sb-payload ID         run a specific payload
 //	--sb-run NAME args...   run an alias (npm, javac, clang++)
 package main
 
@@ -45,7 +44,16 @@ func main() {
 	}
 
 	args := os.Args[1:]
-	dispatch := len(args) >= 1 && (args[0] == "--sb-run" || args[0] == "--sb-list")
+	// --sb-payload may appear anywhere; it selects the payload for this run.
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--sb-payload" && i+1 < len(args) {
+			os.Setenv("SB_PAYLOAD", args[i+1])
+			args = append(args[:i], args[i+2:]...)
+			break
+		}
+	}
+	// --sb-run needs the extracted tree; every other flag is metadata-only.
+	dispatch := len(args) >= 1 && args[0] == "--sb-run"
 	if len(args) >= 1 && strings.HasPrefix(args[0], "--sb-") && !dispatch {
 		if err := inspect(self, args); err != nil {
 			fatalf("%s: %v", filepath.Base(self), err)
@@ -57,8 +65,7 @@ func main() {
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
-	forced := os.Getenv("SB_PAYLOAD")
-	payload, err := b.resolvePayload(forced)
+	payload, err := b.resolvePayload(os.Getenv("SB_PAYLOAD"))
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
@@ -66,7 +73,7 @@ func main() {
 	if err != nil {
 		fatalf("%s: %v", filepath.Base(self), err)
 	}
-	entry, rest := selectEntry(b, payload, filepath.Base(self), args)
+	entry, rest := selectEntry(payload, filepath.Base(self), args)
 	prog := entry
 	if !filepath.IsAbs(prog) {
 		prog = filepath.Join(root, filepath.FromSlash(entry))
@@ -88,7 +95,7 @@ func (b *Bundle) resolvePayload(forced string) (*Payload, error) {
 //	<bundle> --sb-run NAME args     explicit
 //	<symlink NAME> args             argv[0] against aliases
 //	<bundle> args                   the payload entry
-func selectEntry(b *Bundle, p *Payload, invoked string, args []string) (string, []string) {
+func selectEntry(p *Payload, invoked string, args []string) (string, []string) {
 	if len(args) >= 2 && args[0] == "--sb-run" {
 		if path, ok := p.Aliases[args[1]]; ok {
 			return path, args[2:]
@@ -137,12 +144,12 @@ func bundleEnv(p *Payload, root string) []string {
 		}
 	}
 	for k, v := range p.Env {
-		env[k] = expand(v, root)
-		if _, ok := env[k]; !ok {
+		if _, seen := env[k]; !seen {
 			order = append(order, k)
 		}
+		env[k] = expand(v, root)
 	}
-	out := make([]string, 0, len(order))
+	out := make([]string, 0, len(env))
 	seen := map[string]bool{}
 	for _, k := range order {
 		if seen[k] {
@@ -167,7 +174,7 @@ func expand(v, root string) string {
 	return v
 }
 
-// inspect prints metadata; it must work on a foreign-arch bundle too, so it
+// inspect prints metadata. It must work on a foreign-arch bundle too, so it
 // never materialises anything unless --sb-extract-dir asks for it.
 func inspect(self string, args []string) error {
 	b, err := openBundle(self)
@@ -176,9 +183,9 @@ func inspect(self string, args []string) error {
 	}
 	switch args[0] {
 	case "--sb-version":
-		fmt.Printf("stub %s  %s/%s\nbundle %s %s  index %s\n",
-			stubVersion, runtime.GOOS, runtime.GOARCH,
-			b.Index.Tool, b.Index.Version, hex.EncodeToString(b.Trailer.Sum[:12]))
+		fmt.Printf("stub %s  %s/%s\nbundle %s %s  index %s\n", stubVersion,
+			runtime.GOOS, runtime.GOARCH, b.Index.Tool, b.Index.Version,
+			hex.EncodeToString(b.Trailer.Sum[:12]))
 		if b.legacy {
 			fmt.Println("payload format SBX1 (legacy, single payload)")
 		}
@@ -186,7 +193,7 @@ func inspect(self string, args []string) error {
 
 	case "--sb-payloads":
 		for _, p := range b.Index.Payloads {
-			fmt.Printf("%-16s %-8s %-8s %-8s %s\n", p.ID, p.OS, p.Arch, p.Tier, p.Entry)
+			fmt.Printf("%-16s %-8s %-8s %-10s %s\n", p.ID, p.OS, p.Arch, p.Tier, p.Entry)
 		}
 		return nil
 
@@ -202,8 +209,8 @@ func inspect(self string, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s %s\n  %s\t%s (default)\n", b.Index.Tool, b.Index.Version, p.Entry,
-			filepath.Base(p.Entry))
+		fmt.Printf("%s %s\n  %s\t%s (default)\n", b.Index.Tool, b.Index.Version,
+			p.Entry, filepath.Base(p.Entry))
 		names := make([]string, 0, len(p.Aliases))
 		for k := range p.Aliases {
 			names = append(names, k)
@@ -241,16 +248,6 @@ func inspect(self string, args []string) error {
 			return err
 		}
 		fmt.Println(root)
-		return nil
-
-	case "--sb-payload":
-		if len(args) < 2 {
-			return fmt.Errorf("--sb-payload needs an id (see --sb-payloads)")
-		}
-		os.Setenv("SB_PAYLOAD", args[1])
-		// Re-enter without the flag so the normal run path handles it.
-		os.Args = append([]string{os.Args[0]}, args[2:]...)
-		main()
 		return nil
 	}
 	return fmt.Errorf("unknown flag %q", args[0])

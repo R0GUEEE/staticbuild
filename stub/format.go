@@ -5,8 +5,8 @@ package main
 // One file can carry several payloads — one per os/arch — because the same
 // bundle is shipped to a Mac (two slices), a Linux fleet (four arches) or a
 // Windows machine that may be x64 today and ARM64 tomorrow. The stub picks the
-// payload that matches the host it is running on, and the packer stores files
-// with the same content only once across payloads.
+// payload that matches the host it runs on, and the packer stores files with
+// the same content only once across payloads.
 
 import (
 	"encoding/binary"
@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -30,7 +29,6 @@ const (
 	flagSealed  = 1 << 1
 	flagMulti   = 1 << 2
 	layerToken  = "@@SB_LAYER@@/"
-	// Bump when the on-disk cache layout changes so old trees are not reused.
 	cacheSchema = "b2"
 )
 
@@ -105,25 +103,25 @@ type Bundle struct {
 	legacy  bool
 }
 
-func readTrailer(path string) (*Trailer, int64, error) {
+func readTrailer(path string) (*Trailer, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if fi.Size() < trailerSize {
-		return nil, 0, errors.New("not a bundle: file smaller than trailer")
+		return nil, errors.New("not a bundle: file smaller than trailer")
 	}
 	buf := make([]byte, trailerSize)
 	if _, err := f.ReadAt(buf, fi.Size()-trailerSize); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if m := string(buf[0:4]); m != magic2 && m != magic1 {
-		return nil, 0, errors.New("not a bundle: bad magic (is the file truncated?)")
+		return nil, errors.New("not a bundle: bad magic (is the file truncated?)")
 	}
 	tr := &Trailer{
 		Version: binary.LittleEndian.Uint16(buf[4:6]),
@@ -134,13 +132,13 @@ func readTrailer(path string) (*Trailer, int64, error) {
 	}
 	copy(tr.Sum[:], buf[24:56])
 	if tr.Offset+tr.Size != uint64(fi.Size()-trailerSize) {
-		return nil, 0, errors.New("corrupt bundle: index does not abut the trailer")
+		return nil, errors.New("corrupt bundle: index does not abut the trailer")
 	}
-	return tr, fi.Size(), nil
+	return tr, nil
 }
 
 func openBundle(path string) (*Bundle, error) {
-	tr, _, err := readTrailer(path)
+	tr, err := readTrailer(path)
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +194,6 @@ func hostOS() string {
 		return "macos"
 	case "ios", "iossimulator":
 		return "ios"
-	case "windows":
-		return "windows"
 	}
 	return runtime.GOOS
 }
@@ -205,21 +201,20 @@ func hostOS() string {
 // hostArch reports the architecture the payload should be built for. On Windows
 // an amd64 stub runs on ARM64 hardware under emulation; PROCESSOR_ARCHITEW6432
 // names the real machine, so a single windows-x86_64 download still gets the
-// native arm64 payload when one is bundled.
+// native arm64 payload when the bundle carries one.
 func hostArch() string {
 	if runtime.GOOS == "windows" {
-		if v := strings.ToUpper(os.Getenv("PROCESSOR_ARCHITEW6432")); v != "" {
-			return normArch(v)
-		}
-		if v := strings.ToUpper(os.Getenv("PROCESSOR_ARCHITECTURE")); v != "" {
-			return normArch(v)
+		for _, k := range []string{"PROCESSOR_ARCHITEW6432", "PROCESSOR_ARCHITECTURE"} {
+			if v := strings.ToUpper(os.Getenv(k)); v != "" {
+				return normArch(v)
+			}
 		}
 	}
 	return normArch(runtime.GOARCH)
 }
 
-// selectPayload resolves --sb-payload, exact host match, then arch-insensitive
-// match, then a single-payload fallback.
+// selectPayload resolves --sb-payload, exact host match, then a single-payload
+// fallback (a foreign-arch bundle extracted on purpose).
 func (b *Bundle) selectPayload(forced string) (*Payload, error) {
 	ps := b.Index.Payloads
 	if len(ps) == 0 {
@@ -256,18 +251,16 @@ func (b *Bundle) payloadIDs() string {
 
 // payloadKey is the content address of one extracted payload tree.
 func (b *Bundle) payloadKey(p *Payload) string {
-	h := hex.EncodeToString(b.Trailer.Sum[:8])
-	return cacheSchema + "-" + sanitize(p.ID) + "-" + h
+	return cacheSchema + "-" + sanitize(p.ID) + "-" + hex.EncodeToString(b.Trailer.Sum[:8])
 }
 
 func sanitize(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9', r == '-', r == '.':
 			return r
 		}
 		return '_'
 	}, s)
 }
-
-var _ = io.EOF
