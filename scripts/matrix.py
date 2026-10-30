@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Turn a manifest into a GitHub Actions build matrix.
+"""Turn the manifest into a GitHub Actions matrix — no workflow-side logic.
 
-    matrix.py --target linux-arm64            # -> {"include": [...]}
-    matrix.py --target linux-arm64 --ids clang,zig
     matrix.py --list-targets
-    matrix.py --check                        # validate manifest + recipes exist
-
-Only entries whose target block is buildable (status != "not-supported") are
-emitted. `runs-on` comes from the target table so the workflow needs no logic.
+    matrix.py --target linux-arm64 [--status ga,experimental]
+    matrix.py --all                    # every buildable cell, universals excluded
+    matrix.py --compose                # one entry per universal target
+    matrix.py --check                  # manifest + recipe consistency
 """
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -16,17 +16,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "manifest", "tools.json")
-
-# `container` is the default build image. A tool whose upstream binaries are
-# glibc-linked (swift, java, node) overrides it per target with `"image":`.
-TARGETS = {
-    "linux-arm64": {"runs-on": "ubuntu-24.04-arm", "container": "alpine:3.21", "family": "elf"},
-    "linux-x86_64": {"runs-on": "ubuntu-24.04", "container": "alpine:3.21", "family": "elf"},
-    "ios-arm64": {"runs-on": "macos-15", "container": None, "family": "macho"},
-    "ios-arm64-sim": {"runs-on": "macos-15", "container": None, "family": "macho"},
-    "macos-arm64": {"runs-on": "macos-15", "container": None, "family": "macho"},
-    "macos-x86_64": {"runs-on": "macos-13", "container": None, "family": "macho"},
-}
+BUILDABLE = ("ga", "experimental")
 
 
 def load():
@@ -34,84 +24,127 @@ def load():
         return json.load(fh)
 
 
-def buildable(tool, target):
-    t = tool.get("targets", {}).get(target)
-    if not t:
-        return False
-    return t.get("status", "ga") not in ("not-supported", "planned")
+def cell_include(tool, target, spec, block):
+    inc = {"tool": tool["id"], "target": target,
+           "version": block.get("version") or tool["version"],
+           "tier": block.get("tier", "sfx"), "status": block.get("status", "ga"),
+           "entry": block.get("entry", ""),
+           "runs_on": spec.get("runs_on", "ubuntu-24.04"),
+           "container": spec.get("container") or "",
+           "os": spec.get("os"), "arch": spec.get("arch"),
+           "family": spec.get("family"), "goos": spec.get("goos"),
+           "goarch": spec.get("goarch"), "smoke": block.get("smoke", ""),
+           "budget": block.get("size_budget_mb", 0),
+           "recipe": "recipes/%s.sh" % tool["id"],
+           "name": "%s-%s" % (tool["id"], target)}
+    if block.get("image"):
+        inc["image"] = block["image"]
+    return inc
+
+
+def buildable(doc, target, ids, statuses=BUILDABLE):
+    spec = doc["targets"].get(target)
+    if spec is None:
+        sys.exit("matrix: unknown target %r (see --list-targets)" % target)
+    out = []
+    for tool in doc["tools"]:
+        if ids and tool["id"] not in ids:
+            continue
+        block = tool.get("targets", {}).get(target)
+        if not block or block.get("status", "ga") not in statuses:
+            continue
+        out.append(cell_include(tool, target, spec, block))
+    return out
+
+
+def compose_entries(doc, ids, statuses=BUILDABLE):
+    out = []
+    for name, spec in doc["targets"].items():
+        if not spec.get("fat"):
+            continue
+        tools = [t["id"] for t in doc["tools"]
+                 if (not ids or t["id"] in ids)
+                 and t.get("targets", {}).get(name, {}).get("status", "ga") in statuses]
+        if tools:
+            out.append({"target": name, "slices": spec["fat"], "tools": ",".join(tools),
+                        "runs_on": spec.get("runs_on", "macos-14")})
+    return out
+
+
+def check(doc):
+    problems, ids = [], set()
+    for tool in doc["tools"]:
+        tid = tool["id"]
+        if tid in ids:
+            problems.append("duplicate tool id %s" % tid)
+        ids.add(tid)
+        if not os.path.isfile(os.path.join(ROOT, "recipes", tid + ".sh")):
+            problems.append("%s: missing recipes/%s.sh" % (tid, tid))
+        for target, block in tool.get("targets", {}).items():
+            spec = doc["targets"].get(target)
+            if spec is None:
+                problems.append("%s/%s: unknown target" % (tid, target))
+                continue
+            status = block.get("status", "ga")
+            if status not in ("ga", "experimental", "planned", "not-supported"):
+                problems.append("%s/%s: bad status %s" % (tid, target, status))
+            if status in BUILDABLE and not block.get("entry"):
+                problems.append("%s/%s: buildable without an entry" % (tid, target))
+            if status == "not-supported" and not block.get("notes"):
+                problems.append("%s/%s: not-supported without a reason" % (tid, target))
+            if block.get("image") and not spec.get("container"):
+                problems.append("%s/%s: image override on a non-container target" % (tid, target))
+    for p in problems:
+        print("FAIL:", p)
+    n = sum(1 for t in doc["tools"] for b in t["targets"].values()
+            if b.get("status") in BUILDABLE)
+    print("matrix: %d tools, %d targets, %d buildable cells"
+          % (len(doc["tools"]), len(doc["targets"]), n))
+    return 1 if problems else 0
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target")
-    ap.add_argument("--ids")
+    ap.add_argument("--ids", default="")
+    ap.add_argument("--status", default="ga")
     ap.add_argument("--list-targets", action="store_true")
+    ap.add_argument("--compose", action="store_true")
+    ap.add_argument("--all", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--pretty", action="store_true")
     args = ap.parse_args()
-
-    if args.list_targets:
-        print(json.dumps(TARGETS, indent=2))
-        return
-
-    data = load()
-    tools = data["tools"]
+    doc = load()
+    ids = set(x.strip() for x in args.ids.split(",") if x.strip())
+    statuses = tuple(x.strip() for x in args.status.split(",") if x.strip())
 
     if args.check:
-        problems = []
-        ids = set()
-        for t in tools:
-            if t["id"] in ids:
-                problems.append(f"duplicate id {t['id']}")
-            ids.add(t["id"])
-            recipe = os.path.join(ROOT, "recipes", t["id"] + ".sh")
-            if not os.path.isfile(recipe):
-                problems.append(f"{t['id']}: missing recipes/{t['id']}.sh")
-            for name, blk in t.get("targets", {}).items():
-                if name not in TARGETS:
-                    problems.append(f"{t['id']}: unknown target {name}")
-                if blk.get("status", "ga") not in ("ga", "experimental", "not-supported", "planned"):
-                    problems.append(f"{t['id']}/{name}: bad status {blk['status']}")
-                if blk.get("image") and TARGETS[name]["container"] is None:
-                    problems.append(f"{t['id']}/{name}: image override is only meaningful for ELF targets")
-                if blk.get("status", "ga") in ("ga", "experimental") and not blk.get("entry"):
-                    problems.append(f"{t['id']}/{name}: buildable but no entry")
-        for p in problems:
-            print("FAIL:", p)
-        sys.exit(1 if problems else 0)
-
+        return check(doc)
+    if args.list_targets:
+        for name, spec in doc["targets"].items():
+            n = sum(1 for t in doc["tools"]
+                    if t.get("targets", {}).get(name, {}).get("status") in BUILDABLE)
+            print("%-18s %-8s %-10s %-16s %2d tools  %s"
+                  % (name, spec.get("os"), spec.get("arch"), spec.get("runs_on", ""),
+                     n, spec.get("abi", "")))
+        return 0
+    if args.compose:
+        print(json.dumps({"include": compose_entries(doc, ids, statuses)}))
+        return 0
+    if args.all:
+        inc = []
+        for name in doc["targets"]:
+            if doc["targets"][name].get("fat"):
+                continue
+            inc.extend(buildable(doc, name, ids, statuses))
+        print(json.dumps({"include": inc}))
+        return 0
     if not args.target:
-        ap.error("--target is required unless --check/--list-targets")
-
-    tid = args.target
-    if tid not in TARGETS:
-        sys.exit(f"unknown target {tid} (known: {', '.join(TARGETS)})")
-    only = set(args.ids.split(",")) if args.ids else None
-
-    include = []
-    for t in tools:
-        if only and t["id"] not in only:
-            continue
-        if not buildable(t, tid):
-            continue
-        blk = t["targets"][tid]
-        include.append({
-            "id": t["id"],
-            "target": tid,
-            "version": blk.get("version") or t.get("version", ""),
-            "tier": blk.get("tier", "sfx"),
-            "runs-on": TARGETS[tid]["runs-on"],
-            "container": TARGETS[tid]["container"] or "",
-            "image": blk.get("image") or TARGETS[tid]["container"] or "",
-            "timeout": blk.get("timeout", 240),
-            "family": TARGETS[tid]["family"],
-            "budget_mb": blk.get("size_budget_mb", 0),
-            "smoke": blk.get("smoke", ""),
-        })
-
-    out = {"include": include}
-    print(json.dumps(out, indent=None if not args.pretty else 2))
+        ap.error("--target is required (or --list-targets / --compose / --all / --check)")
+    print(json.dumps({"include": buildable(doc, args.target, ids, statuses)},
+                     indent=2 if args.pretty else None))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
