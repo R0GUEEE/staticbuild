@@ -171,6 +171,9 @@ def verify_one(path, manifest, tier_only):
     if not os.path.isfile(path):
         rep.bad("no such file")
         return rep
+    if base.endswith((".sha256", ".json", ".md")):
+        rep.ok("not an artefact (checksum/manifest), skipped")
+        return rep
     size_mb = os.path.getsize(path) / (1024 * 1024)
     tool, block, spec = locate(manifest, base)
     try:

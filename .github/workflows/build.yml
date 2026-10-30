@@ -150,11 +150,11 @@ jobs:
         shell: bash
         run: |
           set -eu
-          shopt -s nullglob
-          files=(dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}*)
-          if [ ${#files[@]} -eq 0 ]; then echo "::error::no artefact produced"; exit 1; fi
+          f="dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}"
+          [ -f "$f" ] || f="$f.exe"
+          if [ ! -f "$f" ]; then echo "::error::no artefact produced"; exit 1; fi
           python3 -m pip install --quiet zstandard || true
-          python3 scripts/verify.py --tier-only "${files[@]}"
+          python3 scripts/verify.py --tier-only "$f"
 
       - uses: actions/upload-artifact@v4
         with:
