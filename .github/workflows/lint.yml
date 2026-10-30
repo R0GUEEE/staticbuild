@@ -71,11 +71,13 @@ jobs:
               f.write(bytes([f.read(1)[0] ^ 0xFF]))
           print("corrupted one payload byte")
           PY
-          if /tmp/broken; then echo "corruption not detected"; exit 1; fi
+          # cold cache: a warm one is keyed by the trailer digest and would
+          # legitimately skip the extraction that does the verification
+          if SB_CACHE=$(mktemp -d) /tmp/broken; then echo "corruption not detected"; exit 1; fi
           echo "rejected as expected"
 
       - name: truncated bundle must be rejected
         run: |
           head -c 3000000 /tmp/hello-bundle > /tmp/truncated
-          if /tmp/truncated; then echo "truncation not detected"; exit 1; fi
+          if SB_CACHE=$(mktemp -d) /tmp/truncated; then echo "truncation not detected"; exit 1; fi
           echo "rejected as expected"
