@@ -54,7 +54,7 @@ sb_make_jre() {
   "$_jdk/bin/jlink" \
     --add-modules "$(sb_jre_modules)" \
     --strip-debug --no-man-pages --no-header-files \
-    --compress=zip-6 --module-info=java.base \
+    --compress=zip-6 \
     --output "$_dest" || die "jlink failed"
   # os/arch-specific bits are fine, but the module list must be complete enough
   # to compile: javac without java.compiler fails at startup, not at compile time.

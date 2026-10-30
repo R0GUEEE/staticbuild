@@ -9,16 +9,16 @@
 . "$(dirname "$0")/_python.sh"
 sb_init
 
-sb_build_python ensurepip
+sb_build_python
 
 mkdir -p "$SB_STAGE/bin" "$SB_STAGE/lib"
 cp "$SB_PY_PREFIX/bin/python3" "$SB_STAGE/bin/python3"
 ln -sf python3 "$SB_STAGE/bin/python"
 ln -sf python3 "$SB_STAGE/bin/python3.$SB_PY_VERSION"
-cp -R "$SB_PY_PREFIX/lib/python3.$SB_PY_VERSION" "$SB_STAGE/lib/"
+cp -R "$SB_PY_PREFIX/lib/python3.$SB_PY_MM" "$SB_STAGE/lib/"
 sb_alias "python=bin/python" "python3.$SB_PY_VERSION=bin/python3.$SB_PY_VERSION"
 
-if [ -x "$SB_PY_PREFIX/bin/pip3" ] || [ -f "$SB_STAGE/lib/python3.$SB_PY_VERSION/site-packages/pip/__main__.py" ]; then
+if [ -x "$SB_PY_PREFIX/bin/pip3" ] || [ -f "$SB_STAGE/lib/python3.$SB_PY_MM/site-packages/pip/__main__.py" ]; then
   sb_wrapper pip3 <<'WRAP'
 #!/bin/sh
 set -eu
@@ -31,5 +31,5 @@ fi
 export SB_PATHS="bin"
 export SB_ENTRY="bin/python3"
 export SB_ENV='"PYTHONHOME": "${ROOT}", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"'
-sb_layer "lib/python3.$SB_PY_VERSION"
+sb_layer "lib/python3.$SB_PY_MM"
 sb_finish

@@ -19,7 +19,7 @@ _m=$(find "$SB_WORK/src/meson" -maxdepth 1 -type d -name 'meson-*' | head -1)
 
 mkdir -p "$SB_STAGE/bin" "$SB_STAGE/lib"
 cp "$SB_PY_PREFIX/bin/python3" "$SB_STAGE/bin/python3"
-cp -R "$SB_PY_PREFIX/lib/python3.$SB_PY_VERSION" "$SB_STAGE/lib/"
+cp -R "$SB_PY_PREFIX/lib/python3.$SB_PY_MM" "$SB_STAGE/lib/"
 cp -R "$_m/mesonbuild" "$SB_STAGE/lib/mesonbuild"
 
 # meson's entry point is mesonbuild/mesonmain.py:main, called through runpy so
@@ -35,5 +35,5 @@ export SB_PATHS="bin"
 export SB_ENTRY="bin/meson"
 export SB_REQUIRE=""
 export SB_ENV='"PYTHONHOME": "${ROOT}", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"'
-sb_layer "lib/python3.$SB_PY_VERSION"
+sb_layer "lib/python3.$SB_PY_MM"
 sb_finish

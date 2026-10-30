@@ -12,12 +12,15 @@
 # `python3` that dies on `import ssl`, which is the failure mode everyone hits.
 
 SB_PY_VERSION=${SB_PY_VERSION:-3.12.7}
+# The install tree is lib/python3.12 while the binary is python3.12.7; conflating
+# the two is how `cp -R .../python3.3.12.7` happened.
+SB_PY_MM=${SB_PY_MM:-$(printf '%s' "$SB_PY_VERSION" | cut -d. -f1,2)}
 SB_PY_PREFIX=${SB_PY_PREFIX:-$SB_WORK/python-static}
 
 # sb_build_python [ensurepip]  -> $SB_PY_PREFIX/{bin/python3,lib/python3.X}
 sb_build_python() {
   _pip=${1:-no}
-  if [ -x "$SB_PY_PREFIX/bin/python3" ] && [ -d "$SB_PY_PREFIX/lib/python3.$SB_PY_VERSION" ]; then
+  if [ -x "$SB_PY_PREFIX/bin/python3" ] && [ -d "$SB_PY_PREFIX/lib/python3.$SB_PY_MM" ]; then
     return 0
   fi
   src=$(sb_fetch "https://www.python.org/ftp/python/$SB_PY_VERSION/Python-$SB_PY_VERSION.tgz")
@@ -30,6 +33,10 @@ sb_build_python() {
     ensurepip) _ep=--with-ensurepip=install ;;
     *)         _ep=--without-ensurepip ;;
   esac
+  # ensurepip boots the interpreter we just built and installs pip from a
+  # bundled wheel; that fails while the tree is still in build/, so the python
+  # bundle ships without pip and meson does not ask for it.
+  [ "$_pip" = ensurepip ] && _ep=--without-ensurepip
 
   log "configure python $SB_PY_VERSION (static, all extensions linked in)"
   ./configure --prefix=/usr --without-shared --disable-test-modules \
@@ -65,21 +72,21 @@ sb_build_python() {
   [ -n "$_b" ] || die "python: no interpreter was installed"
   cp "$_b" "$SB_PY_PREFIX/bin/python3"
   chmod 755 "$SB_PY_PREFIX/bin/python3"
-  cp -R "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_VERSION" "$SB_PY_PREFIX/lib/"
+  cp -R "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_MM" "$SB_PY_PREFIX/lib/"
 
   # Tests, IDLE and tkinter are between a third and a half of the stdlib and no
   # build tool on this device imports them.
-  _lib=$SB_PY_PREFIX/lib/python3.$SB_PY_VERSION
+  _lib=$SB_PY_PREFIX/lib/python3.$SB_PY_MM
   rm -rf "$_lib/test" "$_lib/idlelib" "$_lib/tkinter" "$_lib/turtledemo" \
          "$_lib/lib2to3" "$_lib/ensurepip" "$_lib/pydoc_data"
   find "$_lib" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
   find "$_lib/lib-dynload" -name '*.so' -delete 2>/dev/null || true
   rmdir "$_lib/lib-dynload" 2>/dev/null || true
 
-  if [ "$_pip" = ensurepip ] && [ -d "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_VERSION/site-packages/pip" ]; then
+  if [ "$_pip" = ensurepip ] && [ -d "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_MM/site-packages/pip" ]; then
     mkdir -p "$_lib/site-packages"
-    cp -R "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_VERSION/site-packages/pip" \
-          "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_VERSION/site-packages/pip-".* \
+    cp -R "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_MM/site-packages/pip" \
+          "$SB_WORK/python-dist/usr/lib/python3.$SB_PY_MM/site-packages/pip-".* \
           "$_lib/site-packages/" 2>/dev/null || true
   fi
 

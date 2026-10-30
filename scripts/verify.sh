@@ -174,17 +174,25 @@ for t in m["tools"]:
 print("\t0\t\t")
 SBLOOKUP
 )
-  _id=$(echo "$_budget" | cut -f1)
-  _mb=$(echo "$_budget" | cut -f2)
-  _smoke=$(echo "$_budget" | cut -f3)
-  _tgt=$(echo "$_budget" | cut -f4)
-  _tier=$(echo "$_budget" | cut -f5)
+  _id=$(echo "$_budget" | head -1 | cut -f1)
+  _mb=$(echo "$_budget" | head -1 | cut -f2)
+  _smoke=$(echo "$_budget" | head -1 | cut -f3)
+  _tgt=$(echo "$_budget" | head -1 | cut -f4)
+  _tier=$(echo "$_budget" | head -1 | cut -f5)
 
   # A bundle's first four bytes are the ELF/Mach-O magic of its stub, so the
-  # trailer is the only reliable discriminator.
+  # trailer is the only reliable discriminator. SBX2 has no tar to unpack here,
+  # but the stub itself will materialise the tree on request — which is also
+  # the honest test of the code path a user hits on first run.
+  _root=""
   if is_sbx2 "$_artifact"; then
     ok "SBX2 bundle (content-addressed blobs, index at trailer)"
-    _bin=$_artifact
+    _root=$TMP/root; rm -rf "$_root"; mkdir -p "$_root"
+    if ! "$_artifact" --sb-extract-dir "$_root" >"$TMP/extract.log" 2>&1; then
+      bad "payload does not extract"
+      tail -5 "$TMP/extract.log" | sed 's/^/       /'
+      return
+    fi
   elif read_trailer "$_artifact" >/dev/null 2>&1; then
     ok "SFX bundle (static stub + zstd payload)"
     _root=$TMP/root; rm -rf "$_root"; mkdir -p "$_root"
@@ -192,6 +200,18 @@ SBLOOKUP
       bad "payload does not extract"
       return
     fi
+  else
+    _kind=$(file_kind "$_artifact")
+    case "$_kind" in
+      elf|macho) ;;
+      *) bad "not an ELF, not a Mach-O and not a bundle"; return ;;
+    esac
+    check_leaks "$_artifact"
+    if [ "$_kind" = elf ]; then check_elf "$_artifact" "${_tier:-static}"; else check_macho "$_artifact"; fi
+    _bin=$_artifact
+  fi
+
+  if [ -n "$_root" ]; then
     _entry=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["entry"])' "$_root/.sb/meta.json")
     _bin=$_root/$_entry
     [ -x "$_bin" ] && ok "entrypoint $_entry is executable" || bad "entrypoint $_entry is not executable"
@@ -210,15 +230,6 @@ SBLOOKUP
         fi ;;
       *)        bad "entrypoint is neither ELF, Mach-O nor a script" ;;
     esac
-  else
-    _kind=$(file_kind "$_artifact")
-    case "$_kind" in
-      elf|macho) ;;
-      *) bad "not an ELF, not a Mach-O and not a bundle"; return ;;
-    esac
-    check_leaks "$_artifact"
-    if [ "$_kind" = elf ]; then check_elf "$_artifact" "${_tier:-static}"; else check_macho "$_artifact"; fi
-    _bin=$_artifact
   fi
 
   if [ "${_mb:-0}" != 0 ] && [ -n "${_mb:-}" ]; then
