@@ -8,7 +8,7 @@ src=$(sb_fetch "https://github.com/tukaani-project/xz/releases/download/v$SB_VER
 sb_unpack "$src" "$SB_WORK/src/xz"
 sb_cd "$SB_WORK/src/xz/xz-$SB_VERSION"
 
-./configure --disable-shared --enable-static --disable-nls --disable-doc \
+sb_configure --disable-shared --enable-static --disable-nls --disable-doc \
   --disable-ifunc --prefix=/usr \
   CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
 make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"

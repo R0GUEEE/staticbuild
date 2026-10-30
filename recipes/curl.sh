@@ -17,7 +17,7 @@ if [ "$_ssl" = openssl ] && [ ! -f "$SB_WORK/openssl/lib/libssl.a" ]; then
   die "static OpenSSL missing: run \`make tools/openssl\` first (or BUILD_OPENSSL=1 to build it here)"
 fi
 
-./configure --prefix=/usr --disable-shared --enable-static \
+sb_configure --prefix=/usr --disable-shared --enable-static \
   --without-libidn2 --without-nghttp2 --without-ngtcp2 --without-brotli \
   --without-zstd --without-libpsl --disable-ldap --disable-ldaps --disable-manual \
   --with-ssl="${OPENSSL_PREFIX:-$SB_WORK/openssl}" \

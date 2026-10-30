@@ -19,7 +19,7 @@ case "$SB_FAMILY" in
     sb_bin ninja.exe ninja.exe
     ;;
   elf)
-    cmake -B out -G "Unix Makefiles" \
+    cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_C_FLAGS="-O2" -DCMAKE_CXX_FLAGS="-O2" \
       -DCMAKE_EXE_LINKER_FLAGS="-static" \
@@ -28,7 +28,7 @@ case "$SB_FAMILY" in
     sb_bin out/ninja ninja
     ;;
   macho)
-    cmake -B out -G "Unix Makefiles" \
+    cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$SB_ARCH" \
       -DCMAKE_OSX_SYSROOT="${SB_SDK:-iphoneos}" \

@@ -21,11 +21,11 @@ case "$SB_FAMILY" in
     sb_bin make.exe make.exe
     ;;
   elf)
-    ./configure --disable-nls --without-guile --prefix=/usr \
+    sb_configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
     ;;
   macho)
-    ./configure --disable-nls --without-guile --prefix=/usr \
+    sb_configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_cflags) -Wl,-dead_strip"
     ;;
 esac

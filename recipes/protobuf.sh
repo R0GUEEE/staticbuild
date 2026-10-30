@@ -11,7 +11,7 @@ if [ ! -d "$SB_WORK/src/protobuf/.git" ]; then
 fi
 sb_cd "$SB_WORK/src/protobuf"
 
-cmake -B out -G "Unix Makefiles" \
+cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -Dprotobuf_BUILD_TESTS=OFF \
   -Dprotobuf_BUILD_CONFORMANCE=OFF \

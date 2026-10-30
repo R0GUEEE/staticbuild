@@ -39,7 +39,7 @@ sb_build_python() {
   [ "$_pip" = ensurepip ] && _ep=--without-ensurepip
 
   log "configure python $SB_PY_VERSION (static, all extensions linked in)"
-  ./configure --prefix=/usr --without-shared --disable-test-modules \
+  sb_configure --prefix=/usr --without-shared --disable-test-modules \
       --without-doc-strings --disable-ipv6 $_ep \
       CFLAGS="-O2 -fPIC" LDFLAGS="-static -s" \
       > "$SB_WORK/python-configure.log" 2>&1 || {
