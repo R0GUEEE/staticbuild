@@ -31,7 +31,9 @@ on:
         default: ''
 
 concurrency:
-  group: build-${{ github.ref }}-${{ inputs.target || 'auto' }}
+  # tools are part of the key so a targeted dispatch (one long toolchain) is
+  # not cancelled by an unrelated one; push builds still supersede each other.
+  group: build-${{ github.ref }}-${{ inputs.target || 'auto' }}-${{ inputs.tools || 'all' }}
   cancel-in-progress: true
 
 jobs:
