@@ -158,7 +158,13 @@ jobs:
             -e SB_JOBS=2 -e SOURCE_DATE_EPOCH=1700000000 \
             ${{ matrix.image || 'alpine:3.21' }} sh -c '
               apk add --no-cache build-base cmake ninja python3 curl git perl bash \
-                zstd xz tar file unzip binutils > /dev/null
+                zstd xz tar file unzip binutils linux-headers pkgconf > /dev/null
+              # every recipe declares the packages it needs on its second line
+              deps=$(sed -n "s/^# deps: //p" "recipes/${{ matrix.tool }}.sh")
+              if [ -n "$deps" ] && [ "$deps" != "(none)" ]; then
+                apk add --no-cache $deps > /dev/null 2>&1 || \
+                  echo "::warning::declared deps not all installable: $deps"
+              fi
               make "tools/${{ matrix.tool }}" "TARGET=${{ matrix.target }}"
             '
           sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
