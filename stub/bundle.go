@@ -130,7 +130,7 @@ func (b *Bundle) writeTree(p *Payload, root string) error {
 		return err
 	}
 	defer f.Close()
-	zr, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(2))
+	zr, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderLowmem(true))
 	if err != nil {
 		return err
 	}

@@ -1,148 +1,192 @@
 name: build
 
-# One job per (tool, target), matrix generated from manifest/tools.json.
-# ELF targets build inside a container (docker run, because GitHub's JavaScript
-# actions refuse to run inside an arm64 container); the image comes from the
-# manifest so a glibc-only upstream toolchain (swift, java, node) can pick
-# ubuntu while the pure source builds stay on musl. Mach-O builds natively.
+# One job per (tool, target). The matrix comes from manifest/tools.json via
+# scripts/matrix.py, so adding an architecture is a manifest edit and nothing
+# else. Three runner families: ubuntu (ELF, in an alpine container), windows
+# (PE) and macos (Mach-O, iOS). Universal files are composed from the slices
+# afterwards rather than rebuilt.
 on:
   push:
     branches: [main]
-    paths: ['recipes/**', 'stub/**', 'scripts/**', 'manifest/**', '.github/workflows/build.yml']
+    paths: ['recipes/**', 'stub/**', 'scripts/**', 'tools/**', 'manifest/**',
+            '.github/workflows/build.yml']
   pull_request:
-  workflow_call:
-    inputs:
-      target:
-        type: string
-        default: linux-arm64
-      tools:
-        type: string
-        default: ''
   workflow_dispatch:
     inputs:
-      target:
-        description: target to build
-        type: choice
-        options: [linux-arm64, linux-x86_64, ios-arm64, macos-arm64]
-        default: linux-arm64
-      tools:
-        description: comma-separated ids (empty = all for the target)
+      statuses:
+        description: 'statuses to build (ga or ga,experimental)'
+        type: string
+        default: 'ga'
+      ids:
+        description: 'comma-separated tool ids (empty = all)'
         type: string
         default: ''
 
 concurrency:
-  # tools are part of the key so a targeted dispatch (one long toolchain) is
-  # not cancelled by an unrelated one; push builds still supersede each other.
-  group: build-${{ github.ref }}-${{ inputs.target || 'auto' }}-${{ inputs.tools || 'all' }}
+  group: build-${{ github.ref }}-${{ inputs.ids || 'all' }}-${{ inputs.statuses || 'ga' }}
   cancel-in-progress: true
+
+env:
+  SOURCE_DATE_EPOCH: '1700000000'
 
 jobs:
   plan:
     runs-on: ubuntu-24.04
     outputs:
-      elfc: ${{ steps.m.outputs.elfc }}
-      macho: ${{ steps.m.outputs.macho }}
-      target: ${{ steps.m.outputs.target }}
-      elf_count: ${{ steps.m.outputs.elf_count }}
-      macho_count: ${{ steps.m.outputs.macho_count }}
+      cells: ${{ steps.m.outputs.cells }}
+      compose: ${{ steps.c.outputs.compose }}
     steps:
       - uses: actions/checkout@v4
       - id: m
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, subprocess, os
-          target = os.environ["INPUT_TARGET"] or "linux-arm64"
-          ids = [x for x in os.environ["INPUT_TOOLS"].split(",") if x.strip()]
-          cmd = ["python3", "scripts/matrix.py", "--target", target]
-          if ids:
-              cmd += ["--ids", ",".join(ids)]
-          m = json.loads(subprocess.check_output(cmd))
-          elf = [j for j in m["include"] if j["family"] == "elf"]
-          mac = [j for j in m["include"] if j["family"] == "macho"]
-          print("target=" + target)
-          print("elf_count=" + str(len(elf)))
-          print("macho_count=" + str(len(mac)))
-          print("elfc=" + json.dumps({"include": elf}))
-          print("macho=" + json.dumps({"include": mac}))
-          PY
+          set -eu
+          python3 scripts/matrix.py --all --status "${{ inputs.statuses || 'ga' }}" \
+            --ids "${{ inputs.ids || '' }}" > /tmp/cells.json
+          python3 -c "import json;d=json.load(open('/tmp/cells.json'));print(len(d['include']),'cells')"
+          echo "cells=$(tr -d '\n' < /tmp/cells.json)" >> "$GITHUB_OUTPUT"
+      - id: c
+        run: |
+          set -eu
+          python3 scripts/matrix.py --compose --status "${{ inputs.statuses || 'ga' }}" \
+            --ids "${{ inputs.ids || '' }}" > /tmp/compose.json
+          echo "compose=$(tr -d '\n' < /tmp/compose.json)" >> "$GITHUB_OUTPUT"
+
+  stubs:
+    # The carrier is pure Go, CGO off: one host cross-builds every ELF and PE
+    # stub, including windows-arm64 and windows-386.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: sh scripts/stub-build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stubs-linux
+          path: build/stub/sb-stub-*
+          if-no-files-found: error
+
+  stubs-macos:
+    # Mach-O carriers plus the fat carrier for macos-universal.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: sh scripts/stub-build.sh macos-arm64 macos-x86_64 || true
+      - run: |
+          if [ -f build/stub/sb-stub-macos-arm64 ] && [ -f build/stub/sb-stub-macos-x86_64 ]; then
+            lipo -create -output build/stub/sb-stub-macos-universal \
+              build/stub/sb-stub-macos-arm64 build/stub/sb-stub-macos-x86_64
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stubs-macos
+          path: build/stub/sb-stub-*
+          if-no-files-found: warn
+
+  build:
+    needs: [plan, stubs, stubs-macos]
+    if: needs.plan.outputs.cells != ''
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix: ${{ fromJSON(needs.plan.outputs.cells) }}
+    runs-on: ${{ matrix.runs_on }}
+    container: ${{ matrix.container || null }}
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (ELF container)
+        if: matrix.family == 'elf'
+        run: apk add --no-cache build-base cmake ninja python3 curl git xz zstd \
+               tar unzip bash linux-headers pkgconf openssl-dev zlib-dev
+
+      - name: Toolchain (Windows)
+        if: startsWith(matrix.runs_on, 'windows')
+        shell: bash
+        run: |
+          choco install -y mingw make zip --no-progress || true
+          echo "C:/ProgramData/chocolatey/bin" >> "$GITHUB_PATH"
+          echo "C:/ProgramData/mingw64/mingw64/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Carrier stub
+        shell: bash
+        run: |
+          mkdir -p build/stub
+          sh scripts/stub-build.sh "${{ matrix.target }}" || true
+          ls -l build/stub || true
+
+      - name: Build ${{ matrix.tool }} for ${{ matrix.target }}
+        shell: bash
         env:
-          INPUT_TARGET: ${{ inputs.target }}
-          INPUT_TOOLS: ${{ inputs.tools }}
-      - name: announce
-        run: |
-          echo "::notice::${{ steps.m.outputs.target }}: ${{ steps.m.outputs.elf_count }} ELF jobs, ${{ steps.m.outputs.macho_count }} Mach-O jobs"
+          SB_JOBS: '3'
+          SB_SKIP_VERIFY: '1'
+        run: make "tools/${{ matrix.tool }}" TARGET="${{ matrix.target }}"
 
-  elf:
-    needs: plan
-    if: ${{ needs.plan.outputs.elf_count > 0 }}
-    name: ${{ matrix.id }} (${{ matrix.target }})
-    strategy:
-      fail-fast: false
-      max-parallel: 8
-      matrix: ${{ fromJSON(needs.plan.outputs.elfc) }}
-    runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: ${{ fromJSON(matrix.timeout) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: build/cache
-          key: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
-          restore-keys: sb-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
-      - name: build in container
-        run: |
-          docker run --rm \
-            -v "$PWD":/work -w /work \
-            -e SB_TARGET="${{ matrix.target }}" \
-            -e SB_SKIP_VERIFY=0 \
-            -e CI=1 \
-            "${{ matrix.image }}" /bin/sh scripts/in-container.sh '${{ matrix.id }}' '${{ matrix.target }}'
-          sudo chown -R "$(id -u):$(id -g)" dist build 2>/dev/null || true
-      - name: size
-        run: |
-          ls -l dist/
-          { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify
+        shell: bash
+        run: python3 scripts/verify.py --tier-only "dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}"*
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
+          name: ${{ matrix.name }}
           path: |
-            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
-            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
+            dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}*
           if-no-files-found: warn
           retention-days: 14
 
-  macho:
-    needs: plan
-    if: ${{ needs.plan.outputs.macho_count > 0 }}
-    name: ${{ matrix.id }} (${{ matrix.target }})
+  compose:
+    needs: [plan, build]
+    if: needs.plan.outputs.compose != ''
     strategy:
       fail-fast: false
-      max-parallel: 4
-      matrix: ${{ fromJSON(needs.plan.outputs.macho) }}
-    runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: ${{ fromJSON(matrix.timeout) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.compose) }}
+    runs-on: ${{ matrix.runs_on }}
+    name: compose-${{ matrix.target }}
     steps:
       - uses: actions/checkout@v4
-      - name: build deps
-        run: brew install cmake ninja zstd xz || true
-      - uses: actions/cache@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: build/cache
-          key: sb-macho-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-${{ hashFiles('recipes/**') }}
-          restore-keys: sb-macho-${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}-
-      - name: build
-        run: make "tools/${{ matrix.id }}" TARGET='${{ matrix.target }}' JOBS=$(sysctl -n hw.ncpu)
-      - name: size
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ startsWith(matrix.target, 'macos') && 'stubs-macos' || 'stubs-linux' }}
+          path: build/stub
+      - name: Compose
+        shell: bash
         run: |
-          ls -l dist/
-          { echo "### ${{ matrix.id }} ${{ matrix.version }} (${{ matrix.target }})"; echo '```'; ls -l dist/; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          set -eu
+          chmod +x build/stub/sb-stub-* || true
+          case "${{ matrix.target }}" in
+            macos-universal)   slices="macos-arm64 macos-x86_64" ;;
+            windows-universal) slices="windows-x86_64 windows-arm64" ;;
+            *) echo "unknown universal target"; exit 1 ;;
+          esac
+          for tool in $(echo '${{ matrix.tools }}' | tr ',' ' '); do
+            files=""
+            for s in $slices; do
+              f=$(ls artifacts/"$tool"-*-"$s" 2>/dev/null | grep -v '\.sha256$' | head -1 || true)
+              if [ -z "$f" ]; then files=""; break; fi
+              files="$files $f"
+            done
+            [ -n "$files" ] || { echo "skip $tool: a slice is missing"; continue; }
+            ver=$(basename $(echo $files | awk '{print $1}') | sed "s/^$tool-//; s/-[^-]*-[^-]*$//")
+            python3 scripts/compose.py --target "${{ matrix.target }}" --tool "$tool" \
+              --version "$ver" --stub "build/stub/sb-stub-${{ matrix.target }}" \
+              --out "dist/$tool-$ver-${{ matrix.target }}" $files
+          done
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: ${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
-          path: |
-            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}
-            dist/${{ matrix.id }}-${{ matrix.version }}-${{ matrix.target }}.sha256
+          name: universal-${{ matrix.target }}
+          path: dist/*
           if-no-files-found: warn
-          retention-days: 14

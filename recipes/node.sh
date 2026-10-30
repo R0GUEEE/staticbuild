@@ -1,64 +1,61 @@
 #!/bin/sh
-# deps: (none for the linux bundle) / git + Xcode SDKs for the iOS slice
-# Node.js, plus npm and npx as multi-call aliases of the same file.
-#
-# The upstream linux-arm64 build is glibc, not musl. That is a fact about node,
-# not a build failure: the bundle is tier `layer` (a vendored runtime), not
-# tier `static`, and it declares ubuntu as its build/payload image in the
-# manifest so the smoke test runs in the same libc it ships against.
-. "$(dirname "$0")/_common.sh"
+# deps: curl unzip / git + Xcode for the iOS slice
+# Node.js with npm and npx. Upstream builds are libc-linked on Linux and a plain
+# PE on Windows, so the bundle is tier `layer` there: a vendored runtime, not a
+# single static ELF. The manifest gives node the ubuntu image on Linux so the
+# smoke test runs in the same libc the payload ships against.
+. "$(dirname "$0")/_release.sh"
 sb_init
 
-if [ "$SB_TARGET" != ios-arm64 ]; then
-  case "$SB_TARGET" in
-    linux-arm64)  _t=linux-arm64 ;;
-    linux-x86_64) _t=linux-x64 ;;
-    macos-arm64)  _t=darwin-arm64 ;;
-    *) die "node: no prebuilt for $SB_TARGET" ;;
-  esac
-  src=$(sb_fetch "https://nodejs.org/dist/v$SB_VERSION/node-v$SB_VERSION-$_t.tar.xz")
-  sb_unpack "$src" "$SB_WORK/src/node"
-  _root="$SB_WORK/src/node/node-v$SB_VERSION-$_t"
-  [ -x "$_root/bin/node" ] || die "node: unexpected tarball layout"
+case "$SB_TARGET" in
+  *-universal) log "node: universal composition happens in scripts/compose.py"; exit 0 ;;
+  ios-arm64)
+    command -v git >/dev/null || die "git required for the nodejs-mobile build"
+    [ -d "$SB_WORK/src/nodejs-mobile" ] || \
+      git clone --depth 1 --branch "nodejs-mobile-v$SB_VERSION" \
+        https://github.com/JaneaSystems/nodejs-mobile.git "$SB_WORK/src/nodejs-mobile"
+    sb_cd "$SB_WORK/src/nodejs-mobile"
+    ./configure --without-snapshot --with-intl=none --without-ssl \
+      --openssl-no-asm --dest-os=ios --dest-cpu=arm64 \
+      --v8-options="-DV8_ENABLE_WEBASSEMBLY=0 -DV8_TARGET_ARCH_ARM64=1 -D__arm64__"
+    make -j "$SB_JOBS" LDFLAGS="-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+    sb_stage_dir out/Release .
+    dir=.
+    ;;
+esac
 
-  sb_bin "$_root/bin/node" node
-  mkdir -p "$SB_STAGE/lib/node_modules"
-  cp -R "$_root/lib/node_modules/npm" "$SB_STAGE/lib/node_modules/npm"
-  [ -d "$_root/lib/node_modules/corepack" ] && \
-    cp -R "$_root/lib/node_modules/corepack" "$SB_STAGE/lib/node_modules/corepack"
-else
-  command -v git >/dev/null || die "git required for the nodejs-mobile build"
-  [ -d "$SB_WORK/src/nodejs-mobile" ] || \
-    git clone --depth 1 --branch "nodejs-mobile-v$SB_VERSION" \
-      https://github.com/JaneaSystems/nodejs-mobile.git "$SB_WORK/src/nodejs-mobile"
-
-  sb_cd "$SB_WORK/src/nodejs-mobile"
-  ./configure --without-snapshot --with-intl=none --without-ssl \
-    --openssl-no-asm --dest-os=ios --dest-cpu=arm64 \
-    --v8-options="-DV8_ENABLE_WEBASSEMBLY=0 -DV8_TARGET_ARCH_ARM64=1 -D__arm64__"
-  make -j "$SB_JOBS" LDFLAGS="-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
-
-  sb_bin out/Release/node node
-  mkdir -p "$SB_STAGE/lib/node_modules"
+if [ -z "${dir:-}" ]; then
+  REL=$(sb_pick "linux-x86_64=linux-x64 linux-arm64=linux-arm64 linux-armv7=linux-armv7l \
+windows-x86_64=win-x64 windows-arm64=win-arm64 macos-arm64=darwin-arm64 \
+macos-x86_64=darwin-x64") || { log "node: no upstream build for $SB_TARGET"; exit 0; }
+  case "$REL" in win-*) ext=zip ;; *) ext=tar.gz ;; esac
+  src=$(sb_fetch "https://nodejs.org/dist/v$SB_VERSION/node-v$SB_VERSION-$REL.$ext")
+  work=$SB_WORK/src/node-$SB_TARGET
+  rm -rf "$work"
+  sb_unpack_any "$src" "$work"
+  dir=$(find "$work" -maxdepth 1 -type d -name "node-v*" | head -1)
+  [ -n "$dir" ] || die "node: unexpected archive layout"
+  rm -rf "$dir/include" "$dir/share"
+  sb_stage_dir "$dir" .
 fi
 
-# npm/npx are JS entry points; the wrappers call the bundled node explicitly so
-# they work with no node on PATH and no `#!/usr/bin/env node` resolution.
-sb_wrapper npm <<'WRAP'
-#!/bin/sh
-set -eu
-HERE=$(cd "$(dirname "$0")/.." && pwd)
-exec "$HERE/bin/node" "$HERE/lib/node_modules/npm/bin/npm-cli.js" "$@"
-WRAP
-sb_wrapper npx <<'WRAP'
-#!/bin/sh
-set -eu
-HERE=$(cd "$(dirname "$0")/.." && pwd)
-exec "$HERE/bin/node" "$HERE/lib/node_modules/npm/bin/npx-cli.js" "$@"
-WRAP
+if [ "$SB_FAMILY" = pe ]; then
+  mkdir -p "$SB_STAGE/bin"
+  [ -f "$SB_STAGE/node.exe" ] && mv "$SB_STAGE/node.exe" "$SB_STAGE/bin/node.exe"
+  [ -f "$SB_STAGE/npm.cmd" ] && mv "$SB_STAGE/npm.cmd" "$SB_STAGE/bin/npm.cmd"
+  if [ -d "$SB_STAGE/node_modules" ]; then
+    mkdir -p "$SB_STAGE/lib"
+    mv "$SB_STAGE/node_modules" "$SB_STAGE/lib/node_modules"
+  fi
+  export SB_ENTRY="bin/node.exe"
+  sb_alias "npm=bin/npm.cmd"
+else
+  # bin/npm and bin/npx are upstream scripts that re-exec node; replacing them
+  # with symlinks to node would break them.
+  export SB_ENTRY="bin/node"
+  sb_alias "npm=bin/npm" "npx=bin/npx"
+fi
 
 export SB_PATHS="bin"
-export SB_ENTRY="bin/node"
-export SB_ENV='"NODE_PATH": "${ROOT}/lib/node_modules"'
-sb_layer lib/node_modules
+[ -d "$SB_STAGE/lib/node_modules" ] && sb_layer lib/node_modules
 sb_finish

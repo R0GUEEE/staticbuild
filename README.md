@@ -19,8 +19,10 @@ Pretending these are the same is how toolchain bundles ship broken. Every entry 
 
 | Target family | Targets | The claim | Enforced by |
 |---|---|---|---|
-| **ELF** | `linux-arm64`, `linux-x86_64` | `readelf -d` prints **zero** `DT_NEEDED`. Runs on any aarch64 kernel, including the iOS sandbox guest and a bare initramfs. | `scripts/verify.sh` |
-| **Mach-O** | `ios-arm64`, `macos-arm64` | `otool -L` lists only `/usr/lib/*`, `/System/Library/*`, `@rpath/libswift*` — the dyld shared cache. Nothing extra to embed in the app. | `scripts/verify.sh` |
+| **ELF** | `linux-x86_64`, `linux-arm64`, `linux-armv7`, `linux-386`, `linux-riscv64` | `readelf -d` prints **zero** `DT_NEEDED`. Runs on any kernel of that architecture, including the iOS sandbox guest and a bare initramfs. | `scripts/verify.py` |
+| **PE** | `windows-x86_64`, `windows-arm64`, `windows-386` | PE32+ importing only `kernel32`/`msvcrt`: static CRT, no Visual C++ redistributable to place beside the binary. | `scripts/verify.py` |
+| **Mach-O** | `macos-arm64`, `macos-x86_64`, `ios-arm64`, `ios-arm64-sim` | `otool -L` lists only `/usr/lib/*`, `/System/Library/*`, `@rpath/libswift*` — the dyld shared cache. Nothing extra to embed in the app. | `scripts/verify.py` |
+| **Universal** | `macos-universal`, `windows-universal` | One file, several payloads, chosen at run time. See [docs/targets.md](docs/targets.md) for why Linux cannot have one. | `scripts/compose.py` |
 
 On Darwin there is no `libSystem.a`; a "fully static iOS binary" is a category error. Zero non-system imports is the real, achievable property, and it is the one that shrinks an app bundle.
 
@@ -51,14 +53,21 @@ Not all of these can run *on* iOS. The catalog says so per target instead of qui
 
 ### Status — what CI has actually produced
 
-Green means: built, verified (tier, size budget, smoke run in a clean env) and uploaded as an artifact.
+The matrix is generated from `manifest/tools.json`:
 
-| target | green | written but not yet exercised by CI |
-|---|---|---|
-| `linux-arm64` | `busybox`, `jq`, `ldid`, `make`, `ninja`, `openssl`, `patchelf`, `ripgrep`, `xz`, `zstd` | `llvm`, `swift`, `rust`, `go`, `zig`, `python`, `node`, `typescript`, `java`, `kotlin`, `cmake`, `meson`, `dpkg`, `tar`, `curl`, `git`, `fakeroot`, `ccache`, `protobuf`, `qemu`, `proot`, `theos` |
-| `ios-arm64` / `macos-arm64` | — | every recipe; the Mach-O path needs a macOS runner pass |
+```sh
+python3 scripts/matrix.py --list-targets     # targets, runners, tool counts
+python3 scripts/matrix.py --target windows-arm64 --pretty
+```
 
-The green column is not a claim about the rest: those recipes are written, reviewed and shellcheck-clean, but a recipe that has never run is a recipe with a bug in it. The CI run for this repository is the honest source of truth — open Actions and read the matrix.
+Every cell carries a status: `ga` (built, verified, exercised by CI),
+`experimental` (recipe written, target not in the green matrix), `planned`
+(approach declared, recipe branch not written) or `not-supported` (impossible —
+the reason is in the cell's `notes`). CI builds `ga` by default and takes
+`ga,experimental` on a dispatch.
+
+The green column is not a claim about the rest: an `experimental` recipe has not
+been proven on that target, and the CI run is the honest source of truth.
 
 ---
 
