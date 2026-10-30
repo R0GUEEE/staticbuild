@@ -18,13 +18,13 @@
       "family": "macho",
       "abi": "iphoneos",
       "meaning": "Mach-O for the iOS sandbox: links nothing but the dyld-shared cache libraries (libSystem, libc++, Foundation, libobjc)",
-      "runs_on": "macos-14"
+      "runs_on": "macos-15"
     },
     "macos-arm64": {
       "family": "macho",
       "abi": "macos",
       "meaning": "Mach-O host tool, used to cross-compile iOS products on a Mac",
-      "runs_on": "macos-14"
+      "runs_on": "macos-15"
     }
   },
   "tiers": {

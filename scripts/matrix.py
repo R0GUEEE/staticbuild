@@ -22,9 +22,9 @@ MANIFEST = os.path.join(ROOT, "manifest", "tools.json")
 TARGETS = {
     "linux-arm64": {"runs-on": "ubuntu-24.04-arm", "container": "alpine:3.21", "family": "elf"},
     "linux-x86_64": {"runs-on": "ubuntu-24.04", "container": "alpine:3.21", "family": "elf"},
-    "ios-arm64": {"runs-on": "macos-14", "container": None, "family": "macho"},
-    "ios-arm64-sim": {"runs-on": "macos-14", "container": None, "family": "macho"},
-    "macos-arm64": {"runs-on": "macos-14", "container": None, "family": "macho"},
+    "ios-arm64": {"runs-on": "macos-15", "container": None, "family": "macho"},
+    "ios-arm64-sim": {"runs-on": "macos-15", "container": None, "family": "macho"},
+    "macos-arm64": {"runs-on": "macos-15", "container": None, "family": "macho"},
     "macos-x86_64": {"runs-on": "macos-13", "container": None, "family": "macho"},
 }
 

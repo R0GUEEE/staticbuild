@@ -95,7 +95,7 @@ make verify                              # tier + budget + smoke, every artifact
 ```
 
 Targets: `linux-arm64`, `linux-x86_64`, `ios-arm64`, `macos-arm64`.
-CI builds ELF on `ubuntu-24.04-arm` inside Alpine, and Mach-O on `macos-14`; the matrix is generated from the manifest, so adding a tool never means editing a workflow.
+CI builds ELF on `ubuntu-24.04-arm` inside Alpine, and Mach-O on `macos-15`; the matrix is generated from the manifest, so adding a tool never means editing a workflow.
 
 ---
 
