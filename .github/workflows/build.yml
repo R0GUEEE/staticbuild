@@ -98,15 +98,28 @@ jobs:
       max-parallel: 12
       matrix: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ${{ matrix.runs_on }}
-    container: ${{ matrix.container || null }}
     name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Toolchain (ELF container)
+      # ELF cells build inside `docker run`, not with `container:`. GitHub's
+      # JavaScript actions refuse to start in an Alpine container on an arm64
+      # runner ("only supported on x64 Linux runners"), so the matrix drives
+      # docker itself and only the build step is containerised.
+      - name: Build in container (ELF)
         if: matrix.family == 'elf'
-        run: apk add --no-cache build-base cmake ninja python3 curl git xz zstd \
-               tar unzip bash linux-headers pkgconf openssl-dev zlib-dev
+        run: |
+          set -eu
+          IMAGE="${{ matrix.image || 'alpine:3.21' }}"
+          case "$IMAGE" in
+            alpine*)
+              DEPS="apk add --no-cache build-base cmake ninja python3 curl git xz zstd tar unzip bash linux-headers pkgconf openssl-dev zlib-dev go" ;;
+            *)
+              DEPS="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 curl git xz-utils zstd unzip pkg-config libssl-dev zlib1g-dev golang-go" ;;
+          esac
+          docker run --rm -v "$PWD:/w" -w /w \
+            -e SB_JOBS=3 -e SB_SKIP_VERIFY=1 -e SOURCE_DATE_EPOCH=1700000000 \
+            "$IMAGE" sh -c "$DEPS >/dev/null 2>&1; make tools/${{ matrix.tool }} TARGET=${{ matrix.target }}"
 
       - name: Toolchain (Windows)
         if: startsWith(matrix.runs_on, 'windows')
@@ -117,31 +130,33 @@ jobs:
           echo "C:/ProgramData/mingw64/mingw64/bin" >> "$GITHUB_PATH"
 
       - uses: actions/setup-go@v5
+        if: matrix.family != 'elf'
         with:
           go-version: '1.23'
 
-      - name: Carrier stub
-        shell: bash
-        run: |
-          mkdir -p build/stub
-          sh scripts/stub-build.sh "${{ matrix.target }}" || true
-          if [ -z "$(ls -A build/stub 2>/dev/null)" ]; then
-            echo "::warning::carrier stub missing for ${{ matrix.target }}; recipes will rebuild it"
-          fi
-
-      - name: Build ${{ matrix.tool }} for ${{ matrix.target }}
+      - name: Build (native)
+        if: matrix.family != 'elf'
         shell: bash
         env:
           SB_JOBS: '3'
           SB_SKIP_VERIFY: '1'
         run: make "tools/${{ matrix.tool }}" TARGET="${{ matrix.target }}"
 
-      - name: Verify
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify tier (from any host)
         shell: bash
-        run: python3 scripts/verify.py --tier-only "dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}"*
+        run: |
+          set -eu
+          shopt -s nullglob
+          files=(dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}*)
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no artefact produced"; exit 1; fi
+          python3 -m pip install --quiet zstandard || true
+          python3 scripts/verify.py --tier-only "${files[@]}"
 
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: ${{ matrix.name }}
           path: |
