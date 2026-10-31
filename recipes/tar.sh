@@ -42,8 +42,12 @@ fi
 
 cmake --build out -j "$SB_JOBS"
 
-sb_bin out/bsdtar tar
-sb_bin out/bsdcpio cpio
+# libarchive's cmake puts built programs in <build>/bin; out/bsdtar never exists
+# and the recipe failed after a fully successful 100% build.
+_bin=out
+[ -d out/bin ] && _bin=out/bin
+sb_bin "$_bin/bsdtar" tar
+sb_bin "$_bin/bsdcpio" cpio
 sb_symlinks bsdtar
 export SB_PATHS=bin
 sb_finish

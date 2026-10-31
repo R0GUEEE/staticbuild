@@ -11,9 +11,21 @@ sb_init
 
 if [ "$SB_TARGET" = ios-arm64 ]; then
   command -v git >/dev/null || die "git required for the nodejs-mobile build"
-  [ -d "$SB_WORK/src/nodejs-mobile" ] || \
-    git clone --depth 1 --branch "nodejs-mobile-v$SB_VERSION" \
+  # nodejs-mobile tags stop at v18.x and its branches are named after the
+  # upstream release it is tracking (update22-9-0), so "nodejs-mobile-v22.11.0"
+  # does not exist and the clone died with 'Remote branch not found'. Prefer the
+  # newest 22.x branch, fall back to mobile-master.
+  [ -d "$SB_WORK/src/nodejs-mobile" ] || {
+    _ref=${NODE_MOBILE_REF:-}
+    if [ -z "$_ref" ]; then
+      _ref=$(git ls-remote --heads https://github.com/JaneaSystems/nodejs-mobile.git 2>/dev/null |
+              sed -n 's|.*refs/heads/\(.*22.*\)$|\1|p' | sort | tail -1)
+      [ -n "$_ref" ] || _ref=mobile-master
+    fi
+    log "nodejs-mobile ref $_ref"
+    git clone --depth 1 --branch "$_ref" \
       https://github.com/JaneaSystems/nodejs-mobile.git "$SB_WORK/src/nodejs-mobile"
+  }
   sb_cd "$SB_WORK/src/nodejs-mobile"
   sb_configure --without-snapshot --with-intl=none --without-ssl \
     --openssl-no-asm --dest-os=ios --dest-cpu=arm64 \
