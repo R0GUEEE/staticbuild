@@ -154,8 +154,12 @@ jobs:
         if: matrix.family == 'elf'
         run: |
           set -eu
+          stub="$PWD/build/stub/sb-stub-${{ matrix.target }}"
+          [ -f "$stub" ] || stub="$stub.exe"
+          test -f "$stub" || { echo "::error::no carrier stub for ${{ matrix.target }}"; exit 1; }
+          chmod 755 "$stub"
           docker run --rm -v "$PWD:/w" -w /w \
-            -e SB_JOBS=2 -e SOURCE_DATE_EPOCH=1700000000 \
+            -e SB_JOBS=2 -e SOURCE_DATE_EPOCH=1700000000 -e SB_STUB="/w/build/stub/$(basename "$stub")" \
             ${{ matrix.image || 'alpine:3.21' }} sh -c '
               apk add --no-cache build-base cmake ninja python3 curl git perl bash \
                 zstd xz tar file unzip binutils linux-headers pkgconf > /dev/null

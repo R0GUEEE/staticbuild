@@ -330,6 +330,13 @@ PY
 # The carrier stub for this target. Built on demand and cached in build/stub so
 # a matrix job builds it once and every recipe in that job reuses it.
 sb_stub() {
+  # SB_STUB lets CI hand the container the carrier it already downloaded, which
+  # side-steps any difference in $PWD between host and container.
+  if [ -n "${SB_STUB:-}" ] && [ -f "$SB_STUB" ]; then
+    [ -x "$SB_STUB" ] || chmod 755 "$SB_STUB"
+    printf '%s\n' "$SB_STUB"
+    return 0
+  fi
   _stub=$SB_WORK/stub/sb-stub-$SB_TARGET
   # Go names the output <file>.exe for GOOS=windows even when -o is explicit.
   if [ ! -x "$_stub" ] && [ -x "$_stub.exe" ]; then _stub=$_stub.exe; fi
