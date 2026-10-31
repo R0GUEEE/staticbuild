@@ -97,7 +97,8 @@ def pe(data: bytes) -> dict:
                 return rawptr + (rva - vaddr)
         return None
 
-    dd = opt + (0x70 if pe32plus else 0x60)
+    # Data directory 1 is the import table; index 0 is the export table.
+    dd = opt + (0x70 if pe32plus else 0x60) + 8
     imp_rva, imp_size = struct.unpack_from("<II", data, dd)
     needed, off = [], rva2off(imp_rva) if imp_rva else None
     while off and off + 20 <= len(data):
@@ -105,7 +106,7 @@ def pe(data: bytes) -> dict:
         if name_rva == 0 and iat == 0:
             break
         noff = rva2off(name_rva)
-        if noff is None:
+        if noff is None or noff >= len(data):
             break
         end = data.index(b"\0", noff)
         needed.append(data[noff:end].decode("ascii", "replace"))
