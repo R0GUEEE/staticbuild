@@ -64,6 +64,7 @@ def host_like(spec):
 def non_system(needed, family):
     out = []
     for lib in needed:
+        low = lib.lower()
         if family == "pe":
             # api-ms-win-* / ext-ms-win-* are API sets resolved by the OS to
             # KernelBase and the Universal CRT; they are not redistributables.
