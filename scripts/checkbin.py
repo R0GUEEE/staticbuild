@@ -6,7 +6,8 @@ platform tools — so a Linux runner can hold a windows-arm64 payload to account
     checkbin.py dist/...
 
 ELF:     DT_NEEDED (empty list == fully static)
-PE:      import-table DLL names (kernel32/msvcrt are the allowed set)
+PE:      import-table DLL names (kernel32/msvcrt and the api-ms-win-* API
+         sets are the allowed system set)
 Mach-O:  LC_LOAD_DYLIB paths (dyld shared cache only)
 """
 from __future__ import annotations
