@@ -41,7 +41,7 @@ sb_build_python() {
   log "configure python $SB_PY_VERSION (static, all extensions linked in)"
   sb_configure --prefix=/usr --without-shared --disable-test-modules \
       --without-doc-strings --disable-ipv6 $_ep \
-      CFLAGS="-O2 -fPIC" LDFLAGS="-static -s" \
+      CFLAGS="-O2 -fPIC" LDFLAGS="$(sb_ldflags) -s" \
       > "$SB_WORK/python-configure.log" 2>&1 || {
         tail -40 "$SB_WORK/python-configure.log" >&2
         die "python configure failed"

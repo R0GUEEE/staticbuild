@@ -28,10 +28,10 @@ if [ ! -f "$_plist/lib/libplist-2.0.a" ]; then
 
   if [ -f configure ]; then
     sb_configure --prefix="$_plist" --enable-static --disable-shared \
-      --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
+      --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags)"
   else
     ./autogen.sh --prefix="$_plist" --enable-static --disable-shared \
-      --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
+      --without-cython CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags)"
   fi
   make -j "$SB_JOBS"
   make install
@@ -44,15 +44,26 @@ if [ ! -f "$_ssl/lib/libcrypto.a" ]; then
   sb_unpack "$_ossl" "$SB_WORK/src/openssl-ldid"
   sb_cd "$SB_WORK/src/openssl-ldid/openssl-$OPENSSL_VERSION"
 
+  # OpenSSL names its targets after the *platform triple*, not the arch. The
+  # catch-all used to be linux-aarch64, so an iOS build assembled armv8 crypto
+  # with GNU .S syntax against Apple's assembler and died on 'unknown directive'.
   case "$SB_TARGET" in
-    linux-arm64)  _bt=linux-aarch64 ;;
-    linux-x86_64) _bt=linux-x86_64 ;;
-    macos-arm64)  _bt=darwin64-arm64-cc ;;
-    *)            _bt=linux-aarch64 ;;
+    linux-arm64)   _bt=linux-aarch64 ;;
+    linux-x86_64)  _bt=linux-x86_64 ;;
+    macos-arm64)   _bt=darwin64-arm64-cc ;;
+    macos-x86_64)  _bt=darwin64-x86_64-cc ;;
+    ios-arm64|ios-arm64-sim)
+                   _bt=ios64-cross
+                   # 15-ios.conf derives its -isysroot from these two.
+                   CROSS_TOP=$(dirname "$(dirname "$(sb_ios_sdk)")")
+                   CROSS_SDK=$(basename "$(sb_ios_sdk)")
+                   export CROSS_TOP CROSS_SDK ;;
+    *)             _bt=linux-aarch64 ;;
   esac
 
   ./Configure "$_bt" no-shared no-module no-tests no-docs no-legacy no-engine \
-    --prefix="$_ssl" --openssldir=/etc/ssl --libdir=lib -static -fPIC
+    --prefix="$_ssl" --openssldir=/etc/ssl --libdir=lib -fPIC \
+    $([ "$SB_FAMILY" = elf ] && echo -static)
   make -j "$SB_JOBS" build_libs
   make install_dev
   [ -f "$_ssl/lib/libcrypto.a" ] || die "openssl: libcrypto.a was not installed"

@@ -11,7 +11,7 @@ sb_cd "$SB_WORK/src/xz/xz-$SB_VERSION"
 
 sb_configure --disable-shared --enable-static --disable-nls --disable-doc \
   --disable-ifunc --prefix=/usr \
-  CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
+  CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -s"
 make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 
 sb_bin src/xz/xz xz

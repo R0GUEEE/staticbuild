@@ -77,7 +77,7 @@ while read -r line; do
   grep -q "^$key=" .config && sed -i "s|^$key=.*|$line|" .config || echo "$line" >> .config
 done < "$SB_WORK/bb.fragment"
 yes "" | make oldconfig >/dev/null 2>&1 || true
-make -j "$SB_JOBS" CFLAGS_EXTRA="$(sb_cflags)" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
+make -j "$SB_JOBS" CFLAGS_EXTRA="$(sb_cflags)" LDFLAGS="$(sb_ldflags)"
 
 sb_bin busybox busybox
 export SB_PATHS=bin

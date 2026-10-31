@@ -12,8 +12,11 @@ sb_cd "$SB_WORK/src/jq/jq-$SB_VERSION"
 # jq links programs through libtool, which ignores -static and honours
 # -all-static. configure's probe link is a plain cc invocation though, so the
 # flag can only be applied at make time, never in the configure environment.
+# -static is an ELF-only link mode. Handing it to clang for iPhoneOS is what
+# turned jq's configure probe into "C compiler cannot create executables"; on
+# Darwin the equivalent is no flag at all and a dead-strip link.
 sb_configure --disable-maintainer-mode --disable-docs --with-oniguruma=builtin \
-  CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
+  CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -s"
 make -j "$SB_JOBS" LDFLAGS="$([ "$SB_FAMILY" = elf ] && echo -all-static) -s"
 sb_bin jq jq
 export SB_PATHS=bin
