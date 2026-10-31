@@ -21,7 +21,8 @@ src=$(sb_fetch "https://ziglang.org/download/$SB_VERSION/zig-$REL-$SB_VERSION.$e
 work=$SB_WORK/src/zig-$SB_TARGET
 rm -rf "$work"
 sb_unpack_any "$src" "$work"
-root=$(find "$work" -maxdepth 1 -type d -name 'zig-*' | head -1)
+# mindepth matters: $work itself is named zig-<target>, which would match.
+root=$(find "$work" -mindepth 1 -maxdepth 1 -type d | head -1)
 [ -n "$root" ] || die "zig: unexpected tarball layout"
 
 mkdir -p "$SB_STAGE/bin" "$SB_STAGE/lib"
