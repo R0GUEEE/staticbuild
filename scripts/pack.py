@@ -88,9 +88,12 @@ def main() -> int:
 
     with open(args.stub, "rb") as fh:
         stub = fh.read()
-    if stub[:4] not in (b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe",
-                        b"\xca\xfe\xba\xbe", b"MZ"):
-        sys.exit("pack: %s is not an ELF/Mach-O/PE executable" % args.stub)
+    magic4 = stub[:4]
+    if not (magic4 == b"\x7fELF" or stub[:2] == b"MZ"
+            or magic4 in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe",
+                          b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf")):
+        sys.exit("pack: %s is not an ELF/Mach-O/PE executable (starts %r)" %
+                 (args.stub, stub[:8]))
 
     tool = args.tool or specs[0]["entry"].rsplit("/", 1)[-1]
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)

@@ -336,11 +336,13 @@ PY
 # a matrix job builds it once and every recipe in that job reuses it.
 sb_stub() {
   _stub=$SB_WORK/stub/sb-stub-$SB_TARGET
-  if [ ! -x "$_stub" ]; then
+  # Go on Windows appends .exe to -o output; accept either name.
+  [ -f "$_stub" ] || _stub=$_stub.exe
+  if [ ! -f "$_stub" ]; then
     log "building carrier stub for $SB_TARGET"
     sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" >/dev/null 2>&1 || true
   fi
-  [ -x "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh $SB_TARGET)"
+  [ -f "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh $SB_TARGET)"
   printf '%s\n' "$_stub"
 }
 
