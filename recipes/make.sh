@@ -30,7 +30,10 @@ case "$SB_FAMILY" in
     # finds it on the macOS *host* even though the iPhoneOS SDK does not have
     # it, so the build dies on 'ar.h file not found' after a correct configure.
     # The answer has to be supplied rather than detected.
-    ac_cv_header_ar_h=no \
+    # Exported, not prefixed: a VAR=value prefix on a *shell function* call is
+    # not exported to the configure child process, which is why the first
+    # attempt at this changed nothing.
+    export ac_cv_header_ar_h=no
     sb_configure --disable-nls --without-guile --prefix=/usr \
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -Wl,-dead_strip"
     ;;
