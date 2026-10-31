@@ -2,9 +2,9 @@ name: build
 
 # One job per (tool, target). The matrix comes from manifest/tools.json via
 # scripts/matrix.py, so adding an architecture is a manifest edit and nothing
-# else. Three runner families: ubuntu (ELF, in an alpine container), windows
-# (PE) and macos (Mach-O, iOS). Universal files are composed from the slices
-# afterwards rather than rebuilt.
+# else. Three runner families: ubuntu (ELF), windows (PE) and macos (Mach-O,
+# iOS). ELF cells build inside `docker run` because GitHub's JavaScript actions
+# refuse to start in an Alpine container on an arm64 runner.
 on:
   push:
     branches: [main]
@@ -33,18 +33,18 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     outputs:
-      cells: ${{ steps.m.outputs.cells }}
-      compose: ${{ steps.c.outputs.compose }}
+      cells: ${{ steps.cells.outputs.cells }}
+      compose: ${{ steps.compose.outputs.compose }}
     steps:
       - uses: actions/checkout@v4
-      - id: m
+      - id: cells
         run: |
           set -eu
           python3 scripts/matrix.py --all --status "${{ inputs.statuses || 'ga' }}" \
             --ids "${{ inputs.ids || '' }}" > /tmp/cells.json
-          python3 -c "import json;d=json.load(open('/tmp/cells.json'));print(len(d['include']),'cells')"
+          python3 -c "import json;print(len(json.load(open('/tmp/cells.json'))['include']),'cells')"
           echo "cells=$(tr -d '\n' < /tmp/cells.json)" >> "$GITHUB_OUTPUT"
-      - id: c
+      - id: compose
         run: |
           set -eu
           python3 scripts/matrix.py --compose --status "${{ inputs.statuses || 'ga' }}" \
@@ -52,8 +52,8 @@ jobs:
           echo "compose=$(tr -d '\n' < /tmp/compose.json)" >> "$GITHUB_OUTPUT"
 
   stubs:
-    # The carrier is pure Go, CGO off: one host cross-builds every ELF and PE
-    # stub, including windows-arm64 and windows-386.
+    # The carrier is pure Go, CGO off, dependency vendored: one host
+    # cross-builds every ELF and PE stub, including windows-arm64 and -386.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
           if-no-files-found: error
 
   stubs-macos:
-    # Mach-O carriers plus the fat carrier for macos-universal.
+    # Mach-O carriers, plus the fat carrier used by macos-universal.
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -88,9 +88,9 @@ jobs:
           if-no-files-found: warn
 
   build:
-    # stubs-macos is deliberately not a dependency: a macOS cell builds its own
-    # carrier locally (it is the only place that can), and blocking the whole
-    # matrix on one slow runner would idle 150 jobs.
+    # stubs-macos is deliberately absent: a macOS cell builds its own carrier
+    # (it is the only place that can), and the whole matrix should not idle
+    # waiting on one slow runner.
     needs: [plan, stubs]
     if: needs.plan.outputs.cells != ''
     strategy:
@@ -102,10 +102,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ELF cells build inside `docker run`, not with `container:`. GitHub's
-      # JavaScript actions refuse to start in an Alpine container on an arm64
-      # runner ("only supported on x64 Linux runners"), so the matrix drives
-      # docker itself and only the build step is containerised.
       - name: Build in container (ELF)
         if: matrix.family == 'elf'
         run: |
@@ -115,7 +111,7 @@ jobs:
             alpine*)
               DEPS="apk add --no-cache build-base cmake ninja python3 curl git xz zstd tar unzip bash linux-headers pkgconf openssl-dev zlib-dev go" ;;
             *)
-              DEPS="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 curl git xz-utils zstd unzip pkg-config libssl-dev zlib1g-dev golang-go" ;;
+              DEPS="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 python3-zstandard curl git xz-utils zstd unzip pkg-config libssl-dev zlib1g-dev golang-go" ;;
           esac
           docker run --rm -v "$PWD:/w" -w /w \
             -e SB_JOBS=3 -e SB_SKIP_VERIFY=1 -e SOURCE_DATE_EPOCH=1700000000 \
@@ -146,7 +142,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Verify tier (from any host)
+      - name: Verify the tier claim (from any host)
         shell: bash
         run: |
           set -eu
@@ -165,101 +161,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: stubs-linux
-          path: build/stub/sb-stub-*
-          if-no-files-found: error
-
-  stubs-macos:
-    # Mach-O carriers plus the fat carrier for macos-universal.
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-      - run: sh scripts/stub-build.sh macos-arm64 macos-x86_64 || true
-      - run: |
-          if [ -f build/stub/sb-stub-macos-arm64 ] && [ -f build/stub/sb-stub-macos-x86_64 ]; then
-            lipo -create -output build/stub/sb-stub-macos-universal \
-              build/stub/sb-stub-macos-arm64 build/stub/sb-stub-macos-x86_64
-          fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: stubs-macos
-          path: build/stub/sb-stub-*
-          if-no-files-found: warn
-
-  build:
-    # stubs-macos is deliberately not a dependency: a macOS cell builds its own
-    # carrier locally (it is the only place that can), and blocking the whole
-    # matrix on one slow runner would idle 150 jobs.
-    needs: [plan, stubs]
-    if: needs.plan.outputs.cells != ''
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix: ${{ fromJSON(needs.plan.outputs.cells) }}
-    runs-on: ${{ matrix.runs_on }}
-    name: ${{ matrix.name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      # ELF cells build inside `docker run`, not with `container:`. GitHub's
-      # JavaScript actions refuse to start in an Alpine container on an arm64
-      # runner ("only supported on x64 Linux runners"), so the matrix drives
-      # docker itself and only the build step is containerised.
-      - name: Build in container (ELF)
-        if: matrix.family == 'elf'
-        run: |
-          set -eu
-          IMAGE="${{ matrix.image || 'alpine:3.21' }}"
-          case "$IMAGE" in
-            alpine*)
-              DEPS="apk add --no-cache build-base cmake ninja python3 curl git xz zstd tar unzip bash linux-headers pkgconf openssl-dev zlib-dev go" ;;
-            *)
-              DEPS="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build python3 curl git xz-utils zstd unzip pkg-config libssl-dev zlib1g-dev golang-go" ;;
-          esac
-          docker run --rm -v "$PWD:/w" -w /w \
-            -e SB_JOBS=3 -e SB_SKIP_VERIFY=1 -e SOURCE_DATE_EPOCH=1700000000 \
-            "$IMAGE" sh -c "$DEPS >/dev/null 2>&1; make tools/${{ matrix.tool }} TARGET=${{ matrix.target }}"
-
-      - name: Toolchain (Windows)
-        if: startsWith(matrix.runs_on, 'windows')
-        shell: bash
-        run: |
-          choco install -y mingw make zip --no-progress || true
-          echo "C:/ProgramData/chocolatey/bin" >> "$GITHUB_PATH"
-          echo "C:/ProgramData/mingw64/mingw64/bin" >> "$GITHUB_PATH"
-
-      - uses: actions/setup-go@v5
-        if: matrix.family != 'elf'
-        with:
-          go-version: '1.23'
-
-      - name: Build (native)
-        if: matrix.family != 'elf'
-        shell: bash
-        env:
-          SB_JOBS: '3'
-          SB_SKIP_VERIFY: '1'
-        run: make "tools/${{ matrix.tool }}" TARGET="${{ matrix.target }}"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Verify tier (from any host)
-        shell: bash
-        run: |
-          set -eu
-          f="dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}"
-          [ -f "$f" ] || f="$f.exe"
-          if [ ! -f "$f" ]; then echo "::error::no artefact produced"; exit 1; fi
-          python3 -m pip install --quiet zstandard || true
-          python3 scripts/verify.py --tier-only "$f"
-
-      - uses: actions/upload-artifact@v4
-        with:
           name: ${{ matrix.name }}
           path: |
             dist/${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.target }}*
@@ -267,6 +168,9 @@ jobs:
           retention-days: 14
 
   compose:
+    # A universal file is built from the slices, not rebuilt: extract each
+    # slice's payload and re-pack under one carrier, which also dedupes the
+    # files the slices share.
     needs: [plan, build]
     if: needs.plan.outputs.compose != ''
     strategy:
