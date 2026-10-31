@@ -331,6 +331,8 @@ PY
 # a matrix job builds it once and every recipe in that job reuses it.
 sb_stub() {
   _stub=$SB_WORK/stub/sb-stub-$SB_TARGET
+  # Go names the output <file>.exe for GOOS=windows even when -o is explicit.
+  if [ ! -x "$_stub" ] && [ -x "$_stub.exe" ]; then _stub=$_stub.exe; fi
   if [ ! -x "$_stub" ]; then
     log "building carrier stub for $SB_TARGET"
     sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" >/dev/null 2>&1 || true

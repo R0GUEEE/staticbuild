@@ -41,7 +41,11 @@ build_one() {
         log "skip $t (no cross for $goos from $(uname -s))"; return 0
       fi ;;
   esac
-  out=$OUT/sb-stub-$t
+  case "$goos" in
+    windows) ext=.exe ;;   # Go appends .exe for GOOS=windows even with -o
+    *) ext= ;;
+  esac
+  out=$OUT/sb-stub-$t$ext
   log "stub $t ($goos/$goarch)"
   if [ "$goos" = ios ]; then
     ( cd "$ROOT/stub" && CGO_ENABLED=1 GOOS=ios GOARCH=arm64 \
