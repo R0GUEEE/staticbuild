@@ -131,6 +131,13 @@ def tree_entries(root: str) -> list:
             st = os.lstat(full)
             if stat.S_ISLNK(st.st_mode):
                 out.append({"p": rel, "k": "l", "m": 0o777, "r": os.readlink(full)})
+            elif stat.S_ISREG(st.st_mode) and rel.endswith(".sblayer"):
+                # A layer tree the build host could not symlink (Windows): the
+                # marker carries the hash, the index gets a symlink entry.
+                with open(full) as fh:
+                    sha = json.load(fh)["layer"]
+                out.append({"p": rel[:-len(".sblayer")], "k": "l", "m": 0o777,
+                            "r": LAYER_TOKEN + sha})
             elif stat.S_ISREG(st.st_mode):
                 with open(full, "rb") as fh:
                     data = fh.read()

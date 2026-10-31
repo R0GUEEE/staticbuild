@@ -259,7 +259,12 @@ PYHASH
   rm -rf "$SB_STAGE/layers/$_sha"
   mv "$SB_STAGE/$_rel" "$SB_STAGE/layers/$_sha"
   _target=@@SB_LAYER@@/$_sha
-  ln -s "$_target" "$SB_STAGE/$_rel"
+  # Windows (and any checkout without symlink privileges) cannot ln -s, so the
+  # reference is recorded in a marker file and the packer turns it into a
+  # symlink entry in the index instead.
+  if ! ln -s "$_target" "$SB_STAGE/$_rel" 2>/dev/null; then
+    printf '{"layer":"%s"}\n' "$_sha" > "$SB_STAGE/$_rel.sblayer"
+  fi
   SB_LAYERS="${SB_LAYERS:-} $_sha"
 }
 
