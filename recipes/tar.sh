@@ -13,13 +13,19 @@ sb_cd "$SB_WORK/src/libarchive/libarchive-$SB_VERSION"
 # question on iOS: the iPhoneOS SDK ships libz, libbz2 and liblzma stubs but no
 # libcrypto and no libzstd, so asking for them makes cmake fail with a NOTFOUND
 # variable rather than a missing-header error. Only enable what the SDK has.
-_ssl=ON; _zstd=ON
-if [ "$SB_OS" = ios ]; then _ssl=OFF; _zstd=OFF; fi
+_ssl=ON; _zstd=ON; _acl=ON
+if [ "$SB_OS" = ios ]; then
+  # No libcrypto, no libzstd and no libacl in the iPhoneOS SDK. libarchive
+  # detects acl.h (it exists) and then needs a library that does not, which
+  # cmake reports as 'ACL_LIBRARY ... set to NOTFOUND' after a 47 s configure.
+  _ssl=OFF; _zstd=OFF; _acl=OFF
+fi
 
 cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DENABLE_TEST=OFF -DENABLE_TAR=ON -DENABLE_CPIO=ON -DENABLE_CAT=OFF \
+  -DENABLE_ACL=$_acl \
   -DENABLE_OPENSSL=$_ssl -DENABLE_ZLIB=ON -DENABLE_BZip2=ON -DENABLE_LZMA=ON -DENABLE_ZSTD=$_zstd \
   -DCMAKE_C_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
