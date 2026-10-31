@@ -152,7 +152,7 @@ jobs:
           set -eu
           python3 -m pip install --quiet zstandard || true
           python3 - <<'PY'
-          import glob, os, subprocess, sys
+          import glob, subprocess, sys
           pat = "dist/%s-%s-%s*" % ("${{ matrix.tool }}", "${{ matrix.version }}",
                                     "${{ matrix.target }}")
           files = [f for f in glob.glob(pat) if not f.endswith((".sha256", ".json"))]
