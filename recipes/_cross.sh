@@ -1,28 +1,21 @@
 #!/bin/sh
 # shellcheck shell=sh
-# iOS cross-compilation layer, sourced by _common.sh for every macho target.
+# iOS / macOS cross-compilation layer. Sourced by _common.sh for every target,
+# active only for macho ones.
 #
-# The problem this solves, in one sentence: on a macOS runner an ios-arm64 build
-# is a cross build between two identical machines, so every autoconf and cmake
-# project dutifully compiles a test program, runs it, gets EPERM because the
+# The problem it solves, in one sentence: on a macOS runner an ios-arm64 build is
+# a cross build between two identical machines, so every autoconf and cmake
+# project compiles a test program, tries to run it, gets EPERM because the
 # Mach-O is platform iOS, and aborts with "cannot run C compiled programs".
-# Nothing about the compiler is wrong; the recipe is describing the wrong world.
 #
-# The fix has three parts, and all three are needed:
-#
-#   1. wrappers that carry the SDK, the arch and the deployment target, so `cc`
-#      means "iPhoneOS clang" for every project that ignores CFLAGS;
-#   2. --build/--host on configure, which is what actually makes autoconf skip
-#      its run tests instead of failing on them;
-#   3. a CMake toolchain file, because cmake refuses to cross-compile at all
-#      unless CMAKE_SYSTEM_NAME is set (it then also skips try_run).
-#
-# Everything is derived from $SB_TARGET so ios-arm64 and macos-arm64 work from
-# the same file.
+# Three parts, all required:
+#   1. compiler wrappers carrying -arch/-isysroot/deployment target, exported as
+#      CC/CXX/AR/..., because plenty of builds ignore CFLAGS;
+#   2. --build/--host on configure, which is what makes autoconf skip its run
+#      tests instead of failing them;
+#   3. a cmake toolchain file, because cmake refuses to cross-compile at all
+#      without CMAKE_SYSTEM_NAME and then also stops try_run().
 
-SB_DEPLOY_MIN=${SB_DEPLOY_MIN:-15.0}
-
-# sb_ios_sdk -> the iPhoneOS SDK path cmake/configure must see
 sb_ios_sdk() {
   _s=${IOS_SDK_PATH:-}
   [ -n "$_s" ] || _s=$(xcrun --sdk iphoneos --show-sdk-path 2>/dev/null || true)
@@ -30,34 +23,57 @@ sb_ios_sdk() {
   printf '%s\n' "$_s"
 }
 
-# sb_macho_toolchain -> creates $SB_WORK/bin/sb-cc and friends. Idempotent.
+sb_macos_sdk() {
+  _s=${MACOS_SDK_PATH:-}
+  [ -n "$_s" ] || _s=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)
+  [ -n "$_s" ] || die "no macOS SDK: xcrun --sdk macosx --show-sdk-path is empty"
+  printf '%s\n' "$_s"
+}
+
+# sb_macho_lane -> "flags|xcrun-sdk|cmake-system-name|sysroot"
+sb_macho_lane() {
+  case "$SB_TARGET" in
+    ios-arm64)
+      _s=$(sb_ios_sdk)
+      printf '%s|%s|%s|%s\n' \
+        "-arch $SB_ARCH -isysroot $_s -miphoneos-version-min=${SB_MIN_OS:-15.0}" \
+        iphoneos iOS "$_s" ;;
+    ios-arm64-sim)
+      _s=$(xcrun --sdk iphonesimulator --show-sdk-path 2>/dev/null)
+      printf '%s|%s|%s|%s\n' \
+        "-arch $SB_ARCH -isysroot $_s -mios-simulator-version-min=${SB_MIN_OS:-15.0}" \
+        iphonesimulator iOS "$_s" ;;
+    macos-*)
+      _s=$(sb_macos_sdk)
+      printf '%s|%s|%s|%s\n' \
+        "-arch $SB_ARCH -isysroot $_s -mmacosx-version-min=${SB_MIN_OS:-11.0}" \
+        macosx macOS "$_s" ;;
+    *) die "sb_macho_lane: $SB_TARGET is not a macho target" ;;
+  esac
+}
+
+# sb_macho_toolchain -> writes $SB_WORK/bin/sb-{cc,cxx,ar,...}. Idempotent.
 sb_macho_toolchain() {
+  [ "$(uname -s)" = Darwin ] || return 0
   _bin=$SB_WORK/bin
   mkdir -p "$_bin"
-  _sdk=$(sb_ios_sdk)
-  case "$SB_TARGET" in
-    ios-arm64)     _flags="-arch arm64 -isysroot $_sdk -miphoneos-version-min=$SB_DEPLOY_MIN" ; _xflags="--sdk iphoneos" ;;
-    ios-arm64-sim) _flags="-arch arm64 -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -mios-simulator-version-min=$SB_DEPLOY_MIN" ; _xflags="--sdk iphonesimulator" ;;
-    macos-*)       _flags="-arch $SB_ARCH -mmacosx-version-min=11.0" ; _xflags="" ;;
-    *)             die "sb_macho_toolchain: $SB_TARGET is not a macho target" ;;
-  esac
+  _lane=$(sb_macho_lane)
+  _flags=$(printf '%s' "$_lane" | cut -d'|' -f1)
+  _sdkflag=$(printf '%s' "$_lane" | cut -d'|' -f2)
 
-  # A wrapper, not a CC string with spaces: many builds quote CC as one word
-  # (`$CC $CFLAGS`), and "xcrun -sdk iphoneos clang" in a variable is a classic
-  # way to get "-sdk: command not found" out of a Makefile.
-  cat > "$_bin/sb-cc" <<EOF
-#!/bin/sh
-exec xcrun $_xflags clang $_flags "\$@"
-EOF
-  cat > "$_bin/sb-cxx" <<EOF
-#!/bin/sh
-exec xcrun $_xflags clang++ $_flags "\$@"
-EOF
-  for _t in ar ranlib strip nm ld lipo otool install_name_tool; do
-    cat > "$_bin/sb-$_t" <<EOF
-#!/bin/sh
-exec xcrun $_xflags $_t "\$@"
-EOF
+  # A wrapper, not a CC string with spaces: many Makefiles quote CC as one word
+  # and "xcrun -sdk iphoneos clang" then fails with "-sdk: command not found".
+  for _pair in "cc:clang" "cxx:clang++" "ar:ar" "ranlib:ranlib" "strip:strip" \
+               "nm:nm" "ld:ld" "lipo:lipo" "otool:otool" \
+               "install_name_tool:install_name_tool"; do
+    _name=${_pair%%:*}
+    _tool=${_pair#*:}
+    case "$_tool" in
+      clang|clang++) _f=" $_flags" ;;
+      *)             _f="" ;;
+    esac
+    printf '#!/bin/sh\nexec xcrun --sdk %s %s%s "$@"\n' "$_sdkflag" "$_tool" "$_f" \
+      > "$_bin/sb-$_name"
   done
   chmod 755 "$_bin"/sb-*
 
@@ -74,46 +90,52 @@ EOF
   export SB_HOST_TRIPLE SB_BUILD_TRIPLE
 }
 
-# sb_configure ARGS... -> ./configure with the cross identity applied.
-# A function, not a PATH shim, because recipes call `./configure` by path.
+# sb_configure ARGS... -> ./configure carrying the cross identity.
 sb_configure() {
-  case "$SB_FAMILY" in
-    macho)
-      [ -n "${SB_BUILD_TRIPLE:-}" ] || sb_macho_toolchain
-      log "configure --build=$SB_BUILD_TRIPLE --host=$SB_HOST_TRIPLE"
-      sb_configure --build="$SB_BUILD_TRIPLE" --host="$SB_HOST_TRIPLE" "$@"
-      ;;
-    *) ./configure "$@" ;;
-  esac
+  if [ "$SB_FAMILY" = macho ] && [ "$(uname -s)" = Darwin ]; then
+    [ -n "${SB_BUILD_TRIPLE:-}" ] || sb_macho_toolchain
+    log "configure --build=$SB_BUILD_TRIPLE --host=$SB_HOST_TRIPLE"
+    ./configure --build="$SB_BUILD_TRIPLE" --host="$SB_HOST_TRIPLE" "$@"
+  else
+    ./configure "$@"
+  fi
 }
 
-# sb_cmake_toolchain -> writes the cmake toolchain file, prints its path.
+# sb_cmake_toolchain -> writes and prints the cmake toolchain file.
 sb_cmake_toolchain() {
-  _f=$SB_WORK/macho-toolchain.cmake
-  [ -f "$_f" ] && { printf '%s\n' "$_f"; return 0; }
+  _lane=$(sb_macho_lane)
+  _system=$(printf '%s' "$_lane" | cut -d'|' -f3)
+  _sysroot=$(printf '%s' "$_lane" | cut -d'|' -f4)
+  _f=$SB_WORK/macho-toolchain-$SB_TARGET.cmake
+  if [ -f "$_f" ]; then printf '%s\n' "$_f"; return 0; fi
   mkdir -p "$SB_WORK"
   {
-    printf 'set(CMAKE_SYSTEM_NAME iOS)\n'
-    printf 'set(CMAKE_SYSTEM_PROCESSOR arm64)\n'
-    printf 'set(CMAKE_OSX_ARCHITECTURES arm64)\n'
-    printf 'set(CMAKE_OSX_DEPLOYMENT_TARGET %s)\n' "$SB_DEPLOY_MIN"
-    printf 'set(CMAKE_OSX_SYSROOT %s)\n' "$(sb_ios_sdk)"
-    printf 'set(CMAKE_C_COMPILER %s)\n' "${CC:-$(sb_cc)}"
-    printf 'set(CMAKE_CXX_COMPILER %s)\n' "${CXX:-$(sb_cc)}"
+    printf 'set(CMAKE_SYSTEM_NAME %s)\n' "$_system"
+    printf 'set(CMAKE_SYSTEM_PROCESSOR %s)\n' "$SB_ARCH"
+    printf 'set(CMAKE_OSX_ARCHITECTURES %s)\n' "$SB_ARCH"
+    printf 'set(CMAKE_OSX_DEPLOYMENT_TARGET %s)\n' "${SB_MIN_OS:-15.0}"
+    printf 'set(CMAKE_OSX_SYSROOT %s)\n' "$_sysroot"
     printf 'set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\n'
     printf 'set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)\n'
     printf 'set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)\n'
+    # cmake compiles probe programs and refuses a cross build whose probes cannot
+    # run; a static-library probe needs no execution at all.
     printf 'set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)\n'
+    # iOS defaults every add_executable() to a MACOSX_BUNDLE, and projects that
+    # install their executable then die with "install TARGETS given no BUNDLE
+    # DESTINATION". Our binaries are posix_spawn'd, not SpringBoard-launched.
+    printf 'set(CMAKE_MACOSX_BUNDLE OFF CACHE BOOL "" FORCE)\n'
   } > "$_f"
   printf '%s\n' "$_f"
 }
 
-# sb_cmake_args -> the flags every cmake invocation needs on iOS.
+# sb_cmake_args -> flags every cmake invocation needs on a macho target.
 sb_cmake_args() {
-  if [ "$SB_FAMILY" = macho ]; then
-    printf '%s\n' "-DCMAKE_TOOLCHAIN_FILE=$(sb_cmake_toolchain)"
-  fi
+  [ "$SB_FAMILY" = macho ] || return 0
+  printf '%s\n' "-DCMAKE_TOOLCHAIN_FILE=$(sb_cmake_toolchain)"
+  # Homebrew's cmake is 4.x and refuses projects whose cmake_minimum_required()
+  # predates 3.5 (GNU tar still says 2.8.12). This raises the policy floor only.
+  printf '%s\n' "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
 }
 
-# sb_is_ios -> true when the build product is meant to run on a device
-sb_is_ios() { [ "$SB_TARGET" = ios-arm64 ] || [ "$SB_TARGET" = ios-arm64-sim ]; }
+sb_is_ios() { [ "$SB_OS" = ios ]; }

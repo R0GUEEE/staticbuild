@@ -80,6 +80,10 @@ else
 fi
 die()  { printf '\033[1;31mERR\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Mach-O cross layer: toolchain wrappers, configure identity, cmake toolchain
+# file. Sourced for every target, active only for macho ones.
+. "$SB_ROOT/recipes/_cross.sh"
+
 # ---------------------------------------------------------------- environment
 
 sb_init() {
@@ -94,6 +98,10 @@ sb_init() {
   SB_ALIASES=${SB_ALIASES:-}
 
   log "$SB_TOOL $SB_VERSION → $SB_TARGET ($SB_EFFECTIVE_TIER, $SB_TRIPLE)"
+  if [ "$SB_FAMILY" = macho ] && [ "$(uname -s)" = Darwin ]; then
+    # The cross identity must exist before the first configure/cmake runs.
+    sb_macho_toolchain
+  fi
   if [ "$SB_FAMILY" = elf ] && [ "$(uname -s)" = Darwin ]; then
     warn "cross-building static ELF on Darwin needs zig or an aarch64-musl clang; recipes use \`zig cc\` when SB_CC is unset"
   fi
@@ -110,7 +118,8 @@ sb_cc() {
       elif command -v zig >/dev/null 2>&1; then echo "zig cc -target $SB_TRIPLE"
       else die "no Windows cross compiler: install mingw-w64 or zig, or set MINGW_CC"; fi ;;
     macho)
-      if [ -n "${IOS_CC:-}" ] && { [ "$SB_OS" = ios ] || [ -n "${IOS_HOST:-}" ]; }; then echo "$IOS_CC"
+      if [ -n "${IOS_CC:-}" ]; then echo "$IOS_CC"
+      elif [ -n "${CC:-}" ] && [ -x "${CC:-}" ]; then echo "$CC"
       elif [ "$(uname -s)" = Darwin ]; then echo xcrun -sdk "${SB_SDK:-macosx}" clang
       else die "no Mach-O host compiler: set IOS_CC"; fi ;;
   esac
