@@ -29,6 +29,13 @@ cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DENABLE_OPENSSL=$_ssl -DENABLE_ZLIB=ON -DENABLE_BZip2=ON -DENABLE_LZMA=ON -DENABLE_ZSTD=$_zstd \
   -DCMAKE_C_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"
+if [ "$SB_OS" = ios ] && [ -f out/config.h ]; then
+  # libarchive's cmake checks run against the macOS host as well as the SDK, so
+  # HAVE_FUTIMESAT is set even though iPhoneOS does not declare it, and
+  # archive_read_disk_posix.c then fails on an implicit declaration.
+  sed -i '' 's|#define HAVE_FUTIMESAT 1|/* iOS SDK has no futimesat */|' out/config.h
+fi
+
 cmake --build out -j "$SB_JOBS"
 
 sb_bin out/bsdtar tar

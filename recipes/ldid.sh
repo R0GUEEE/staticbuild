@@ -84,7 +84,10 @@ make -j "$SB_JOBS" VERSION="$SB_VERSION" \
 [ -x ldid ] || { ls -la; die "ldid binary was not produced"; }
 
 sb_bin ldid ldid
-sb_bin ldid ldid2
+# ldid2 is a second name for the same binary. On iOS the artifact has to be a
+# single Mach-O (the carrier stub is itself a macOS binary, so an iOS bundle
+# cannot be unpacked on device yet); two names would force a container.
+[ "$SB_OS" = ios ] || sb_bin ldid ldid2
 export SB_PATHS="bin"
 export SB_ENTRY="bin/ldid"
 sb_finish
