@@ -153,7 +153,9 @@ jobs:
           brew install cmake ninja zstd gpatch 2>/dev/null || true
           # dpkg's configure looks for a GNU patch by name and macOS only ships
           # the BSD one; gpatch installs itself as gpatch, so it gets an alias.
-          if command -v gpatch >/dev/null 2>&1 && ! command -v patch >/dev/null 2>&1; then
+          # macOS always ships /usr/bin/patch (BSD), so "no patch at all" is
+          # never true; the alias directory goes in front of it instead.
+          if command -v gpatch >/dev/null 2>&1; then
             mkdir -p "$HOME/.local/bin"
             ln -sf "$(command -v gpatch)" "$HOME/.local/bin/patch"
             echo "$HOME/.local/bin" >> "$GITHUB_PATH"
