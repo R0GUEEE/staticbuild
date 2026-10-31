@@ -216,6 +216,8 @@ def verify_one(path, manifest, tier_only):
         try:
             tree = sbx.extract(doc, p, os.path.join(tmp, "t"))
             entry = os.path.join(tree, p["entry"])
+            if not os.path.exists(entry) and os.path.exists(entry + ".exe"):
+                entry += ".exe"
             if not os.path.exists(entry):
                 rep.bad("%s: entry %s missing" % (p["id"], p["entry"]))
                 continue

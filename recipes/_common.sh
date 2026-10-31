@@ -287,6 +287,11 @@ sb_strip_stage() {
 }
 
 sb_meta() {
+  # A PE entry keeps its .exe: the stub execs the path the index names, and
+  # `bin/zig` is not a file on Windows.
+  case "$SB_FAMILY" in
+    pe) [ -f "$SB_STAGE/$SB_ENTRY.exe" ] && SB_ENTRY=$SB_ENTRY.exe ;;
+  esac
   {
     printf '{\n'
     printf '  "tool": "%s",\n' "$SB_TOOL"
