@@ -251,7 +251,10 @@ def verify_one(path, manifest, tier_only):
 def main():
     argv = sys.argv[1:]
     tier_only = "--tier-only" in argv
-    args = [a for a in argv if not a.startswith("--")]
+    # Callers glob dist/*, which also matches the checksum sidecars; they are
+    # not artifacts and must not be held to a tier claim.
+    args = [a for a in argv if not a.startswith("--")
+            and not a.endswith((".sha256", "SHA256SUMS"))]
     if "--all" in argv:
         dist = os.environ.get("DIST", os.path.join(ROOT, "dist"))
         args = [os.path.join(dist, f) for f in sorted(os.listdir(dist))
