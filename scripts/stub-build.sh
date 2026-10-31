@@ -44,6 +44,10 @@ build_one() {
   esac
   out=$OUT/sb-stub-$t
   log "stub $t ($goos/$goarch)"
+  # The one dependency is vendored, so this builds with no module proxy: a
+  # container that cannot reach proxy.golang.org still produces carriers.
+  GOFLAGS="-mod=vendor"
+  export GOFLAGS
   if [ "$goos" = ios ]; then
     ( cd "$ROOT/stub" && CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build \
         -buildvcs=false -trimpath -buildmode=pie \
