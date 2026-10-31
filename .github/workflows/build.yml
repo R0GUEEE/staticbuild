@@ -144,6 +144,8 @@ jobs:
 
       - name: Verify the tier claim (from any host)
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           set -eu
           python3 -m pip install --quiet zstandard || true

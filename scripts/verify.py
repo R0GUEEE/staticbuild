@@ -132,7 +132,7 @@ def check_entry(rep, spec, tree, entry, tier, do_smoke, smoke_cmd):
         rep.bad("%s/%s: entry is %s, expected %s" % (spec.get("os"), spec.get("arch"),
                                                      got, family))
         return
-    rep.ok("%s/%s → %s %s" % (spec.get("os"), spec.get("arch"), got, info.get("arch", "")))
+    rep.ok("%s/%s -> %s %s" % (spec.get("os"), spec.get("arch"), got, info.get("arch", "")))
     missing = non_system(info.get("needed", []), family)
     if tier in ("static", "macho"):
         if missing:
