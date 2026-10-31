@@ -94,8 +94,16 @@ sb_macho_toolchain() {
 sb_configure() {
   if [ "$SB_FAMILY" = macho ] && [ "$(uname -s)" = Darwin ]; then
     [ -n "${SB_BUILD_TRIPLE:-}" ] || sb_macho_toolchain
-    log "configure --build=$SB_BUILD_TRIPLE --host=$SB_HOST_TRIPLE"
-    ./configure --build="$SB_BUILD_TRIPLE" --host="$SB_HOST_TRIPLE" "$@"
+    # config.sub shipped with most projects predates arm64-apple-ios-simulator
+    # and rejects it outright ("failed"). Autoconf only needs to know it is
+    # cross-compiling and that the platform is Darwin-ish; the SDK, arch and
+    # deployment target all come from the compiler wrapper.
+    _host=$SB_HOST_TRIPLE
+    case "$_host" in
+      *-apple-ios-simulator) _host=arm64-apple-ios ;;
+    esac
+    log "configure --build=$SB_BUILD_TRIPLE --host=$_host"
+    ./configure --build="$SB_BUILD_TRIPLE" --host="$_host" "$@"
   else
     ./configure "$@"
   fi

@@ -34,6 +34,9 @@ if [ "$SB_OS" = ios ] && [ -f out/config.h ]; then
   # HAVE_FUTIMESAT is set even though iPhoneOS does not declare it, and
   # archive_read_disk_posix.c then fails on an implicit declaration.
   sed -i '' 's|#define HAVE_FUTIMESAT 1|/* iOS SDK has no futimesat */|' out/config.h
+  # Same class of bug: the probe sees the macOS host and enables the MSVC
+  # spelling of fseek, which the SDK does not declare.
+  sed -i '' 's|#define HAVE__FSEEKI64 1|/* not a Darwin symbol */|' out/config.h
 fi
 
 cmake --build out -j "$SB_JOBS"
