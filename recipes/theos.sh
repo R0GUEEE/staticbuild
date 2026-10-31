@@ -31,7 +31,11 @@ mkdir -p "$SB_STAGE/theos"
   ( cd "$SB_STAGE/theos" && tar -xf - )
 
 mkdir -p "$SB_STAGE/bin"
-cat > "$SB_STAGE/bin/theos" <<'SH'
+# The front door is a shell script, which iOS cannot exec directly - the verifier
+# caught it as "entry is script, expected macho". On a Darwin target the script
+# lives in the payload and bin/theos is a native shim that execs /bin/sh with it;
+# on the Linux/macOS columns a shebang script is fine and is what users expect.
+cat > "$SB_STAGE/theos/theos.sh" <<'SH'
 #!/bin/sh
 # Thin front door: prints the layout, sets up a shell with $THEOS exported.
 set -eu
@@ -44,7 +48,13 @@ case "${1:-}" in
              printf 'usage: theos [--version|--path|env]\n' ;;
 esac
 SH
-chmod 755 "$SB_STAGE/bin/theos"
+chmod 755 "$SB_STAGE/theos/theos.sh"
+
+case "$SB_FAMILY" in
+  macho) sb_sh_shim theos theos/theos.sh ;;
+  *)     cp "$SB_STAGE/theos/theos.sh" "$SB_STAGE/bin/theos"
+         chmod 755 "$SB_STAGE/bin/theos" ;;
+esac
 
 # Logos ships as Perl; make it callable without a PATH edit.
 if [ -f "$SB_STAGE/theos/bin/logos.pl" ]; then

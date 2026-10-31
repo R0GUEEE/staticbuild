@@ -43,7 +43,19 @@ sb_build_python() {
   # own generator scripts: "Cross compiling requires --with-build-python".
   _bp=""
   if [ "$SB_FAMILY" = macho ] && [ "$(uname -s)" = Darwin ]; then
-    _bp="--with-build-python=$(command -v python3)"
+    # The build interpreter must match the version being built: CPython refuses
+    # "has incompatible version 3.15 (expected: 3.12)". Homebrew's python3 is
+    # whatever is current, so python@3.12 is looked up explicitly.
+    _host=""
+    for _c in "python$SB_PY_MM" "/opt/homebrew/opt/python@$SB_PY_MM/bin/python$SB_PY_MM" \
+              "$(command -v python3)"; do
+      if command -v "$_c" >/dev/null 2>&1 &&
+         "$_c" -c 'import sys;raise SystemExit(0 if sys.version_info[:2]==tuple(int(x) for x in "'"$SB_PY_MM"'".split(".")) else 1)' 2>/dev/null; then
+        _host=$_c; break
+      fi
+    done
+    [ -n "$_host" ] || die "python $SB_PY_MM is needed as the build interpreter (brew install python@$SB_PY_MM)"
+    _bp="--with-build-python=$_host"
   fi
 
   sb_configure --prefix=/usr --without-shared --disable-test-modules \

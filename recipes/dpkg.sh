@@ -12,6 +12,20 @@ src=$(sb_fetch "https://deb.debian.org/debian/pool/main/d/dpkg/dpkg_${SB_VERSION
 sb_unpack "$src" "$SB_WORK/src/dpkg"
 sb_cd "$SB_WORK/src/dpkg/dpkg-$SB_VERSION"
 
+# dpkg wants md5/sha digest functions. On ELF they come from libmd-dev; on
+# Darwin Homebrew's libmd is the equivalent, and configure only finds it if told.
+if [ "$SB_FAMILY" = macho ] && [ "$(uname -s)" = Darwin ]; then
+  if command -v brew >/dev/null 2>&1; then
+    brew install libmd >/dev/null 2>&1 || true
+    _md=$(brew --prefix libmd 2>/dev/null || true)
+    if [ -n "$_md" ]; then
+      CPPFLAGS="-I$_md/include"
+      LIBS="-L$_md/lib -lmd"
+      export CPPFLAGS LIBS
+    fi
+  fi
+fi
+
 sb_configure --prefix=/usr --disable-shared --enable-static \
   --disable-dselect --disable-start-stop-daemon \
   --disable-update-alternatives --without-libselinux --disable-nls \

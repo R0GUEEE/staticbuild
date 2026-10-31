@@ -339,6 +339,50 @@ print(", ".join(json.dumps(i) for i in items))
 PY
 }
 
+# ------------------------------------------------------- script entry shims
+# A sandboxed iOS app cannot execve a script: there is no shebang resolution for
+# a file inside a bundle, and dyld is handed a text file. Tools that are really
+# shell scripts (theos, npm's launcher, pip) therefore ship a tiny Mach-O shim as
+# bin/<name> that execs /bin/sh with the real script, which stays in the payload
+# as <root>/<script>. The shim finds its own bundle root with
+# _NSGetExecutablePath, so it works from any location the app copies it to.
+sb_sh_shim() {  # sb_sh_shim NAME SCRIPT_REL
+  _name=$1; _script=$2
+  mkdir -p "$SB_WORK/shim" "$SB_STAGE/bin"
+  cat > "$SB_WORK/shim/$_name.c" <<'SHIM'
+#include <mach-o/dyld.h>
+#include <libgen.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+  char exe[4096];
+  uint32_t size = sizeof exe;
+  if (_NSGetExecutablePath(exe, &size) != 0) {
+    fprintf(stderr, "%s: cannot resolve own path\n", argv[0]);
+    return 127;
+  }
+  char *dir = dirname(exe);            /* <root>/bin */
+  char script[4096];
+  snprintf(script, sizeof script, "%s/%s", dir, SCRIPT_REL);
+  /* argv[0] becomes the script so usage messages name the tool, not /bin/sh. */
+  char **av = calloc((size_t)argc + 3, sizeof *av);
+  av[0] = "/bin/sh";
+  av[1] = script;
+  for (int i = 1; i < argc; i++) av[i + 1] = argv[i];
+  execv(av[0], av);
+  perror("execv /bin/sh");
+  return 127;
+}
+SHIM
+  # SCRIPT_REL is "../theos/bin/theos": the shim sits in bin/, so it climbs once.
+  ${CC:-$(sb_cc)} -O2 -DSCRIPT_REL="\"../$_script\"" -o "$SB_STAGE/bin/$_name" \
+    "$SB_WORK/shim/$_name.c" || die "shim for $_name did not compile"
+  chmod 755 "$SB_STAGE/bin/$_name"
+}
+
 # ---------------------------------------------------------------- finishing
 
 # The carrier stub for this target. Built on demand and cached in build/stub so
