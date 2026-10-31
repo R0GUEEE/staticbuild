@@ -128,11 +128,24 @@ jobs:
         with:
           go-version: '1.23'
 
+      # MSYS2's mingw is x86_64-only, so the ARM64 PE cells need a cross
+      # compiler; zig is one static download and targets every Windows ABI.
       - name: toolchain (Windows)
         if: matrix.family == 'pe'
+        shell: bash
         run: |
-          choco install -y --no-progress mingw zip 7zip || true
-          echo "C:/ProgramData/mingw64/mingw64/bin" >> "$GITHUB_PATH"
+          set -eu
+          case "${{ matrix.arch }}" in
+            x86_64) triple=x86_64-windows-gnu ;;
+            arm64)  triple=aarch64-windows-gnu ;;
+            386)    triple=x86-windows-gnu ;;
+            *)      triple=x86_64-windows-gnu ;;
+          esac
+          curl -fsSL -o zig.zip https://ziglang.org/download/0.13.0/zig-windows-x86_64-0.13.0.zip
+          unzip -q zig.zip
+          echo "$PWD/zig-windows-x86_64-0.13.0" >> "$GITHUB_PATH"
+          echo "MINGW_CC=zig cc -target $triple" >> "$GITHUB_ENV"
+          echo "SB_TRIPLE_HINT=$triple" >> "$GITHUB_ENV"
 
       - name: toolchain (macOS)
         if: matrix.family == 'macho'
