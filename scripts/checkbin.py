@@ -113,10 +113,17 @@ def pe(data: bytes) -> dict:
             if name_rva == 0 and iat == 0:
                 break
             noff = rva2off(name_rva)
-            if noff is None:
+            if noff is None or noff >= len(data):
                 break
-            end = data.index(b"\0", noff)
-            needed.append(data[noff:end].decode("ascii", "replace"))
+            end = data.index(b"\0", noff) if b"\0" in data[noff:noff + 512] else noff + 256
+            raw = data[noff:end]
+            # A descriptor table ends at all-zeroes. Anything that is not a
+            # printable *.dll name means the walk has run off the table: some
+            # linkers place the export table right after it and a naive walk
+            # then reads the module name and reports it as an import.
+            if not raw or not all(32 <= b < 127 for b in raw) or not raw.lower().endswith(b".dll"):
+                break
+            needed.append(raw.decode("ascii"))
             off += 20
     return {"format": "pe", "arch": arch, "needed": needed, "kind": kind,
             "pointer_bits": 64 if pe32plus else 32}

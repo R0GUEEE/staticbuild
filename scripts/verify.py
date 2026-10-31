@@ -134,7 +134,7 @@ def check_entry(rep, spec, tree, entry, tier, do_smoke, smoke_cmd):
     if expect and got not in expect:
         rep.bad("%s/%s: entry is %s, expected %s" % (spec.get("os"), spec.get("arch"), got, family))
         return
-    rep.ok("%s/%s → %s %s" % (spec.get("os"), spec.get("arch"), got, info.get("arch", "")))
+    rep.ok("%s/%s -> %s %s" % (spec.get("os"), spec.get("arch"), got, info.get("arch", "")))
     if family == "macho":
         # Shape alone cannot tell an iOS binary from a macOS one: both are thin
         # arm64 Mach-O. The platform field is the only thing that decides
@@ -229,6 +229,8 @@ def verify_one(path, manifest, tier_only):
         try:
             tree = sbx.extract(doc, p, os.path.join(tmp, "t"))
             entry = os.path.join(tree, p["entry"])
+            if not os.path.exists(entry) and os.path.exists(entry + ".exe"):
+                entry += ".exe"
             if not os.path.exists(entry):
                 rep.bad("%s: entry %s missing" % (p["id"], p["entry"]))
                 continue
