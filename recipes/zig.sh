@@ -15,16 +15,23 @@ esac
 
 # The tarball is zig-<os>-<arch>-<ver>.tar.xz: os first, arch second, which is
 # the reverse of the triple everyone writes.
-REL=$(sb_pick "linux-x86_64=linux-x86_64 linux-arm64=linux-aarch64 \
-windows-x86_64=windows-x86_64 windows-arm64=windows-aarch64 \
-macos-arm64=macos-aarch64 macos-x86_64=macos-x86_64" 2>/dev/null || true)
-if [ -z "$REL" ]; then
-  log "zig: no $SB_TARGET host build upstream (cross-target with another arch's zig)"
-  exit 0
-fi
+# Zig renamed its tarballs in 0.14: zig-<arch>-<os>-<ver> now, where every
+# release up to 0.13 said zig-<os>-<arch>-<ver>. Both are supported, and the
+# layout check below is what catches a release that changes it again.
+REL_NEW=$(sb_pick "linux-x86_64=x86_64-linux linux-arm64=aarch64-linux \
+windows-x86_64=x86_64-windows windows-arm64=aarch64-windows \
+macos-arm64=aarch64-macos macos-x86_64=x86_64-macos" 2>/dev/null || true)
+[ -n "$REL_NEW" ] || die "zig: no upstream host build for $SB_TARGET (cross-target from another arch)"
 
-case "$REL" in
-  windows-*) ext=zip ;;
+_arch=${REL_NEW%%-*}
+_os=${REL_NEW##*-}
+case "$SB_VERSION" in
+  0.14*|0.15*|0.16*|1.*) REL=$REL_NEW ;;
+  *)                     REL="$_os-$_arch" ;;
+esac
+
+case "$_os" in
+  windows) ext=zip ;;
   *) ext=tar.xz ;;
 esac
 
@@ -33,7 +40,8 @@ work=$SB_WORK/src/zig-$SB_TARGET
 rm -rf "$work"
 sb_unpack_any "$src" "$work"
 root=$(find "$work" -maxdepth 1 -type d -name 'zig-*' | head -1)
-[ -n "$root" ] || die "zig: unexpected tarball layout"
+[ -n "$root" ] || die "zig: unexpected archive layout in $src"
+[ -x "$root/zig" ] || [ -f "$root/zig.exe" ] || die "zig: $root has no zig binary"
 
 mkdir -p "$SB_STAGE/bin" "$SB_STAGE/lib"
 if [ "$SB_FAMILY" = pe ]; then
