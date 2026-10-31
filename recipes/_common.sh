@@ -335,21 +335,20 @@ PY
 # The carrier stub for this target, built on demand and cached in build/stub so
 # a matrix job builds it once and every recipe in that job reuses it.
 sb_stub() {
-  _stub=$SB_WORK/stub/sb-stub-$SB_TARGET
-  # Go on Windows appends .exe to -o output; accept either name.
-  [ -f "$_stub" ] || _stub=$_stub.exe
-  if [ ! -f "$_stub" ]; then
+  _base=$SB_WORK/stub/sb-stub-$SB_TARGET
+  if [ ! -f "$_base" ] && [ ! -f "$_base.exe" ]; then
     log "building carrier stub for $SB_TARGET"
     # Never swallow the output: a silent stub failure looks exactly like a
     # missing toolchain later, and that cost a CI round trip to find.
     sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" \
       > "$SB_WORK/stub-build.log" 2>&1 || true
-    if [ ! -f "$_stub" ]; then
-      tail -20 "$SB_WORK/stub-build.log" >&2
-    fi
   fi
-  [ -f "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh $SB_TARGET)"
-  printf '%s\n' "$_stub"
+  # Go on Windows appends .exe to -o output; accept either name, but only after
+  # the build, or the fallback sticks even once the plain name exists.
+  if [ -f "$_base" ]; then printf '%s\n' "$_base"; return 0; fi
+  if [ -f "$_base.exe" ]; then printf '%s\n' "$_base.exe"; return 0; fi
+  tail -20 "$SB_WORK/stub-build.log" >&2 2>/dev/null || true
+  die "no carrier stub for $SB_TARGET (scripts/stub-build.sh $SB_TARGET)"
 }
 
 # A tree that is already a single executable needs no container: shipping a
