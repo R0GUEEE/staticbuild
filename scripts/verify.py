@@ -66,7 +66,9 @@ def non_system(needed, family):
     for lib in needed:
         low = lib.lower()
         if family == "pe":
-            if low in checkbin.SYSTEM_PE:
+            # api-ms-win-* / ext-ms-win-* are API sets the OS resolves itself
+            # (KernelBase, Universal CRT): not redistributables.
+            if low in checkbin.SYSTEM_PE or low.startswith(("api-ms-win-", "ext-ms-win-")):
                 continue
         elif family == "macho":
             if any(lib.startswith(p) for p in SYSTEM_MACHO):

@@ -23,11 +23,16 @@ case "$SB_FAMILY" in
     ;;
   elf)
     sb_configure --disable-nls --without-guile --prefix=/usr \
-      CFLAGS="$(sb_cflags)" LDFLAGS="-static -s"
+      CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -s"
     ;;
   macho)
+    # GNU make's arscan.c includes <ar.h> when HAVE_AR_H is set, and autoconf
+    # finds it on the macOS *host* even though the iPhoneOS SDK does not have
+    # it, so the build dies on 'ar.h file not found' after a correct configure.
+    # The answer has to be supplied rather than detected.
+    ac_cv_header_ar_h=no \
     sb_configure --disable-nls --without-guile --prefix=/usr \
-      CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_cflags) -Wl,-dead_strip"
+      CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -Wl,-dead_strip"
     ;;
 esac
 
