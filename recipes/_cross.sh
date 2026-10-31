@@ -94,6 +94,11 @@ sb_macho_toolchain() {
     *-sim) SB_HOST_TRIPLE=${SB_TRIPLE%-simulator} ;;
     *)     SB_HOST_TRIPLE=$SB_TRIPLE ;;
   esac
+  # Some configure scripts whitelist the host triples they will cross-compile
+  # for and reject arm64-apple-ios outright ("cross build not supported for
+  # aarch64-apple-ios" - CPython 3.12). For those, a recipe sets SB_CONFIG_HOST
+  # to a triple configure knows while the compiler wrappers still emit iOS code.
+  SB_HOST_TRIPLE=${SB_CONFIG_HOST:-$SB_HOST_TRIPLE}
   SB_BUILD_TRIPLE=$(uname -m)-apple-darwin
   export SB_HOST_TRIPLE SB_BUILD_TRIPLE
 }

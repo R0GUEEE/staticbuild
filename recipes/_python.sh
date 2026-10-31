@@ -58,6 +58,14 @@ sb_build_python() {
     _bp="--with-build-python=$_host"
   fi
 
+  # CPython's configure refuses unknown cross targets by name before it looks at
+  # the compiler. Darwin's SDK layout is identical for macOS and iOS, so the
+  # accepted triple is used and the wrappers decide what the output actually is.
+  if [ "$SB_FAMILY" = macho ]; then
+    SB_CONFIG_HOST=aarch64-apple-darwin
+    export SB_CONFIG_HOST
+  fi
+
   sb_configure --prefix=/usr --without-shared --disable-test-modules \
       --without-doc-strings --disable-ipv6 $_ep $_bp \
       CFLAGS="-O2 -fPIC" LDFLAGS="$(sb_ldflags) -s" \
