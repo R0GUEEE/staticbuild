@@ -340,7 +340,13 @@ sb_stub() {
   [ -f "$_stub" ] || _stub=$_stub.exe
   if [ ! -f "$_stub" ]; then
     log "building carrier stub for $SB_TARGET"
-    sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" >/dev/null 2>&1 || true
+    # Never swallow the output: a silent stub failure looks exactly like a
+    # missing toolchain later, and that cost a CI round trip to find.
+    sh "$SB_ROOT/scripts/stub-build.sh" "$SB_TARGET" \
+      > "$SB_WORK/stub-build.log" 2>&1 || true
+    if [ ! -f "$_stub" ]; then
+      tail -20 "$SB_WORK/stub-build.log" >&2
+    fi
   fi
   [ -f "$_stub" ] || die "no carrier stub for $SB_TARGET (scripts/stub-build.sh $SB_TARGET)"
   printf '%s\n' "$_stub"
