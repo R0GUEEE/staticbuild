@@ -25,15 +25,23 @@ macos-arm64=aarch64-macos macos-x86_64=x86_64-macos" 2>/dev/null || true)
 
 _arch=${REL_NEW%%-*}
 _os=${REL_NEW##*-}
-case "$SB_VERSION" in
-  0.14*|0.15*|0.16*|1.*) REL=$REL_NEW ;;
-  *)                     REL="$_os-$_arch" ;;
-esac
-
 case "$_os" in
   windows) ext=zip ;;
   *) ext=tar.xz ;;
 esac
+
+# The rename landed in 0.14.1, not 0.14.0, so neither name can be assumed:
+# probe both with a HEAD request and download whichever exists.
+REL_OLD="$_os-$_arch"
+REL=""
+for _cand in "$REL_NEW" "$REL_OLD"; do
+  _url="https://ziglang.org/download/$SB_VERSION/zig-$_cand-$SB_VERSION.$ext"
+  if curl -fsIL --retry 2 --max-time 30 "$_url" >/dev/null 2>&1; then
+    REL=$_cand
+    break
+  fi
+done
+[ -n "$REL" ] || die "zig $SB_VERSION: neither zig-$REL_NEW-$SB_VERSION.$ext nor zig-$REL_OLD-$SB_VERSION.$ext exists"
 
 src=$(sb_fetch "https://ziglang.org/download/$SB_VERSION/zig-$REL-$SB_VERSION.$ext")
 work=$SB_WORK/src/zig-$SB_TARGET
