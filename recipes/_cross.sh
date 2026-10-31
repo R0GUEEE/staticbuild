@@ -136,6 +136,11 @@ sb_cmake_args() {
   # Homebrew's cmake is 4.x and refuses projects whose cmake_minimum_required()
   # predates 3.5 (GNU tar still says 2.8.12). This raises the policy floor only.
   printf '%s\n' "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  # check_function_exists() only compiles, and a C99 compiler happily accepts an
+  # implicit declaration, so every function the SDK lacks (futimesat on iOS) is
+  # reported present and the build fails later in the real file. Making implicit
+  # declarations an error is what makes those probes answer honestly.
+  printf '%s\n' "-DCMAKE_REQUIRED_FLAGS=-Werror=implicit-function-declaration"
 }
 
 sb_is_ios() { [ "$SB_OS" = ios ]; }

@@ -26,15 +26,34 @@ case "$SB_FAMILY" in
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -s"
     ;;
   macho)
-    # GNU make's arscan.c includes <ar.h> when HAVE_AR_H is set, and autoconf
-    # finds it on the macOS *host* even though the iPhoneOS SDK does not have
-    # it, so the build dies on 'ar.h file not found' after a correct configure.
-    # The answer has to be supplied rather than detected.
-    # Exported, not prefixed: a VAR=value prefix on a *shell function* call is
-    # not exported to the configure child process, which is why the first
-    # attempt at this changed nothing.
-    export ac_cv_header_ar_h=no
+    # The iPhoneOS SDK has no <ar.h>, and make's arscan.c includes it
+    # unconditionally on every non-Windows, non-Android platform (the guarded
+    # fallback struct exists only for BEOS/ZOS). No configure answer can help:
+    # the header has to exist. This is binutils' own definition, which is also
+    # the layout Mach-O static archives use, so symbol table scanning stays
+    # correct rather than being stubbed out.
+    mkdir -p "$SB_WORK/compat"
+    cat > "$SB_WORK/compat/ar.h" <<'ARH'
+#ifndef SB_COMPAT_AR_H
+#define SB_COMPAT_AR_H
+/* Supplied for platforms whose SDK omits <ar.h> (iPhoneOS). Layout per
+   binutils/include/aout/ar.h; ARMAG/ARFMAG are the same on Mach-O archives. */
+#define ARMAG  "!<arch>\n"
+#define SARMAG 8
+#define ARFMAG "`\n"
+struct ar_hdr {
+  char ar_name[16];
+  char ar_date[12];
+  char ar_uid[6];
+  char ar_gid[6];
+  char ar_mode[8];
+  char ar_size[10];
+  char ar_fmag[2];
+};
+#endif
+ARH
     sb_configure --disable-nls --without-guile --prefix=/usr \
+      CPPFLAGS="-I$SB_WORK/compat" \
       CFLAGS="$(sb_cflags)" LDFLAGS="$(sb_ldflags) -Wl,-dead_strip"
     ;;
 esac
