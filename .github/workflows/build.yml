@@ -149,7 +149,15 @@ jobs:
 
       - name: toolchain (macOS)
         if: matrix.family == 'macho'
-        run: brew install cmake ninja zstd 2>/dev/null || true
+        run: |
+          brew install cmake ninja zstd gpatch 2>/dev/null || true
+          # dpkg's configure looks for a GNU patch by name and macOS only ships
+          # the BSD one; gpatch installs itself as gpatch, so it gets an alias.
+          if command -v gpatch >/dev/null 2>&1 && ! command -v patch >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$(command -v gpatch)" "$HOME/.local/bin/patch"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: stub (fallback)
         run: |

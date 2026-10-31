@@ -26,6 +26,7 @@ cmake -B out $(sb_cmake_args) -G "Unix Makefiles" \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DENABLE_TEST=OFF -DENABLE_TAR=ON -DENABLE_CPIO=ON -DENABLE_CAT=OFF \
   -DENABLE_ACL=$_acl \
+  $([ "$SB_OS" = ios ] && echo "-DHAVE_FUTIMESAT=0") \
   -DENABLE_OPENSSL=$_ssl -DENABLE_ZLIB=ON -DENABLE_BZip2=ON -DENABLE_LZMA=ON -DENABLE_ZSTD=$_zstd \
   -DCMAKE_C_FLAGS="$(sb_cflags)" \
   -DCMAKE_EXE_LINKER_FLAGS="$([ "$SB_FAMILY" = elf ] && echo -static)"

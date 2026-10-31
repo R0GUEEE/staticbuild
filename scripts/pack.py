@@ -97,7 +97,12 @@ def main() -> int:
         stub = fh.read()
     if not stub:
         sys.exit(f"pack: stub {args.stub} is empty")
-    if stub[:4] not in (b"\x7fELF", b"cffa", b"\xca\xfe", b"MZ"):
+    # Mach-O 64-bit little-endian starts with CF FA ED FE; comparing against the
+    # *string* "cffa" (as this once did) rejects every valid arm64 Mach-O carrier
+    # with the confusing message that it is not an executable at all.
+    if stub[:4] not in (b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe",
+                        b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe",
+                        b"\xbe\xba\xfe\xca", b"MZ"):
         sys.exit(f"pack: {args.stub} is not an ELF/Mach-O/PE executable")
 
     tool = args.tool or specs[0]["entry"].rsplit("/", 1)[-1]

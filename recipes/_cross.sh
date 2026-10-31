@@ -85,7 +85,15 @@ sb_macho_toolchain() {
   export STRIP=${STRIP:-$_bin/sb-strip}
   export NM=${NM:-$_bin/sb-nm}
   export LD=${LD:-$_bin/sb-ld}
-  SB_HOST_TRIPLE=$SB_TRIPLE
+  # Old config.sub (GNU make 4.4.1 ships 2018) does not know
+  # arm64-apple-ios-simulator and aborts with "config.sub ... failed". The
+  # simulator distinction is carried by -isysroot and -mios-simulator-version-min
+  # in the wrapper flags, not by the host triple, so autoconf gets the device
+  # triple and still treats the build as a cross build.
+  case "$SB_TARGET" in
+    *-sim) SB_HOST_TRIPLE=${SB_TRIPLE%-simulator} ;;
+    *)     SB_HOST_TRIPLE=$SB_TRIPLE ;;
+  esac
   SB_BUILD_TRIPLE=$(uname -m)-apple-darwin
   export SB_HOST_TRIPLE SB_BUILD_TRIPLE
 }
