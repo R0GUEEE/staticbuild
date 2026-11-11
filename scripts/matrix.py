@@ -4,6 +4,7 @@
     matrix.py --list-targets
     matrix.py --target linux-arm64                 # buildable cells, as include[]
     matrix.py --target windows-arm64 --ids go,zig
+    matrix.py --targets ios-arm64,ios-arm64-sim     # a subset of targets
     matrix.py --compose                            # one entry per universal target
     matrix.py --check                              # manifest + recipes consistency
 
@@ -124,6 +125,7 @@ def check(doc):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target")
+    ap.add_argument("--targets", help="comma-separated subset of targets (--all minus the rest)")
     ap.add_argument("--ids")
     ap.add_argument("--list-targets", action="store_true")
     ap.add_argument("--compose", action="store_true")
@@ -148,9 +150,18 @@ def main():
                    spec.get("abi", "")))
         return 0
     if args.all:
+        # --targets narrows --all. Iterating one column (ios-arm64) instead of
+        # all fifteen is the difference between a 12-job run and a 200-job run
+        # when the thing being debugged only exists on one platform.
+        only = [t.strip() for t in (args.targets or "").split(",") if t.strip()]
+        unknown = [t for t in only if t not in doc["targets"]]
+        if unknown:
+            sys.exit("matrix: unknown target(s): %s" % ", ".join(unknown))
         inc = []
         for name in doc["targets"]:
             if doc["targets"][name].get("fat"):
+                continue
+            if only and name not in only:
                 continue
             inc.extend(buildable(doc, name, ids, statuses))
         print(json.dumps({"include": inc}))

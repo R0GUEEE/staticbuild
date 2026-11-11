@@ -23,9 +23,13 @@ on:
         description: 'comma-separated tool ids (empty = all)'
         type: string
         default: ''
+      targets:
+        description: 'comma-separated targets to limit to (empty = all)'
+        type: string
+        default: ''
 
 concurrency:
-  group: build-${{ github.ref }}-${{ inputs.ids || 'all' }}-${{ inputs.statuses || 'ga' }}
+  group: build-${{ github.ref }}-${{ inputs.ids || 'all' }}-${{ inputs.statuses || 'ga' }}-${{ inputs.targets || 'every' }}
   cancel-in-progress: true
 
 env:
@@ -47,7 +51,7 @@ jobs:
       - id: m
         run: |
           python3 scripts/matrix.py --all --status "${{ inputs.statuses || 'ga' }}" \
-            --ids "${{ inputs.ids || '' }}" > /tmp/cells.json
+            --ids "${{ inputs.ids || '' }}" --targets "${{ inputs.targets || '' }}" > /tmp/cells.json
           echo "cells=$(cat /tmp/cells.json | tr -d '\n')" >> "$GITHUB_OUTPUT"
           echo "count=$(python3 -c "import json;print(len(json.load(open('/tmp/cells.json'))['include']))")" >> "$GITHUB_OUTPUT"
       - id: c
